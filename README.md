@@ -14,16 +14,25 @@ Interactive, contextual, vector-drawn in-cockpit MFD displays for **Elite Danger
 - **Persistent Settings & Custom Theming**: Save custom $X/Y/Z$ positions, angles, scale, glass opacity, tracking mode (Cockpit-Locked vs Head HUD), preset color themes, and custom RGBA vector tuning across game restarts.
 - **Contextual Vehicle & HUD Gating**: Customize display rules for Ship, SRV, SLF Fighter, Docked vs In-Flight, and Combat vs Analysis HUD modes.
 
+## Documentation & Custom Display Authoring
+
+- **[MFD Display & Plugin Authoring Guide](docs/mfd-authoring-guide.md)**: Complete JSON schema reference, interactive list/keyvalue/text tabs, clipboard copying, and bidirectional `events.jsonl` integration.
+- **[Cockpit MFD Architecture & Design Spec](docs/cockpit-mfd-architecture.md)**: Full technical architecture of the rendering pipeline, OpenXR quad layer compositor, and input router.
+
 ## Installation
 
 1. Install **[EDVR](https://github.com/characterecho-sean/edvr-unofficial-patch)** (v0.18.0+).
-2. Download `edvr_mfd.dll` from Releases.
-3. Place `edvr_mfd.dll` into the `plugins/` directory beside your game executable:
+2. Download or build the MFD plugin.
+3. Place `plugin.dll` into the `plugins/edvr_mfd/` directory beside your game executable:
    ```
    <Elite Dangerous Odyssey Folder>\
        d3d11.dll
+       Openvr\win64\openvr_api.dll
        plugins\
-           edvr_mfd.dll
+           edvr_mfd\
+               plugin.dll
+               settings.ini
+               displays\
    ```
 4. Launch Elite Dangerous in VR!
 
@@ -34,7 +43,10 @@ Requirements: Windows 10/11, Visual Studio 2019/2022 with C++ Desktop Developmen
 ```cmd
 build.bat
 ```
-The compiled DLL will be placed in `build\plugins\edvr_mfd.dll`.
+The compiled DLL will be placed in `build\plugins\edvr_mfd\plugin.dll`. To build and install directly to your Steam / Frontier game directory:
+```cmd
+python tools\install_mfd.py --target steam
+```
 
 ## License
 
