@@ -193,8 +193,12 @@ void MfdInputRouter::reloadBindingsFromGame() {
         if (parseBindsXml(filepath, m_bindings)) {
             m_bindings.loadedFromBinds = true;
             m_bindings.presetName = preset;
-            Log::get().note("mfd_input: loaded Elite bindings from '%s' (preset: %s)\n",
-                            filepath.c_str(), preset.c_str());
+            Log::get().note("mfd_input: loaded Elite bindings from '%s' (preset: %s, up=0x%X/pov=%d, dn=0x%X/pov=%d, sel=0x%X, back=0x%X, next=0x%X, prev=0x%X)\n",
+                            filepath.c_str(), preset.c_str(),
+                            m_bindings.up.joyButtonMask, m_bindings.up.povUp ? 1 : 0,
+                            m_bindings.down.joyButtonMask, m_bindings.down.povDown ? 1 : 0,
+                            m_bindings.select.joyButtonMask, m_bindings.back.joyButtonMask,
+                            m_bindings.nextTab.joyButtonMask, m_bindings.prevTab.joyButtonMask);
             break;
         }
     }
@@ -278,6 +282,8 @@ bool MfdInputRouter::processInput(bool isMfdFocused, IMfdProvider* activeProvide
                        keyDownSelect || keyDownBack || keyDownNextTab || keyDownPrevTab);
 
     if (action != MfdInputAction::kNone && activeProvider) {
+        Log::get().note("mfd_input: routed action mask 0x%04X to provider '%s'\n",
+                        static_cast<uint32_t>(action), activeProvider->id());
         activeProvider->onInput(action);
     }
 

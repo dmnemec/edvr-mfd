@@ -201,8 +201,8 @@ const char* themeName(MfdColorTheme theme) {
 }
 
 bool isActivityActive(uint32_t mask, uint32_t flags) {
-    if (flags == 0) return false; // Suppress during title, loading, main menu
     if (mask == kActivityAlways) return true;
+    if (flags == 0) return false; // Suppress during title, loading, main menu
 
     bool inShip = (flags & (1 << 24)) != 0 || ((flags & ((1 << 25) | (1 << 26))) == 0);
     bool inSrv = (flags & (1 << 26)) != 0;
@@ -1072,12 +1072,11 @@ void MfdManager::update(const Vec3& headPos, const Vec3& headForward, float dtSe
     m_lastHeadPos = headPos;
 
     EliteStatusData status = readEliteStatus();
-    bool inCockpit = (status.flags != 0);
 
     for (auto& slot : m_slots) {
         if (!slot.isVisible || !slot.provider) continue;
 
-        bool active = inCockpit && isActivityActive(slot.activityMask, status.flags);
+        bool active = isActivityActive(slot.activityMask, status.flags);
 
         // Update provider internal data / timers
         if (active) {
@@ -1089,6 +1088,7 @@ void MfdManager::update(const Vec3& headPos, const Vec3& headForward, float dtSe
 
         if (!active) {
             slot.currentAlpha = 0.0f;
+            slot.provider->onFocusChanged(false);
             continue;
         }
 
@@ -1100,8 +1100,7 @@ void MfdManager::update(const Vec3& headPos, const Vec3& headForward, float dtSe
             effectivePose.orientation = slot.pose.orientation;
         }
 
-        MfdFocusState prevState = slot.gazeTracker.currentState();
-        MfdFocusState newState = slot.gazeTracker.update(headPos, headForward, effectivePose, dtSeconds);
+        slot.gazeTracker.update(headPos, headForward, effectivePose, dtSeconds);
 
         // Update smooth alpha for auto-hide fade transition
         if (slot.autoHideUntilGaze) {
@@ -1112,12 +1111,8 @@ void MfdManager::update(const Vec3& headPos, const Vec3& headForward, float dtSe
             slot.currentAlpha = 1.0f;
         }
 
-        // Notify provider if focus state crossed threshold
-        bool wasFocused = (prevState == MfdFocusState::kFocused);
-        bool isFocused = (newState == MfdFocusState::kFocused);
-        if (wasFocused != isFocused) {
-            slot.provider->onFocusChanged(isFocused);
-        }
+        // Keep provider focus in sync
+        slot.provider->onFocusChanged(slot.gazeTracker.isFocused());
     }
 }
 

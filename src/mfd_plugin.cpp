@@ -17,6 +17,7 @@ namespace edvr::mfd {
 namespace {
 
 int mfdPluginInit(void* /*hostReserved*/) {
+    edvr::Log::get().init(edvr::executableDirectory() + L"\\edvr_logs");
     edvr::Config::get().init(edvr::executableDirectory());
     bool enabled = edvr::Config::get().getBool("fix.cockpit_mfd", true);
     MfdManager::instance().initialize(512, 384);
@@ -43,12 +44,11 @@ void mfdPluginUpdate(const EdvrPosef* headPose, float dtSeconds) {
     MfdManager::instance().update(headPos, headFwd, dtSeconds);
 
     auto* focused = MfdManager::instance().focusedSlot();
-    if (focused && focused->provider) {
-        MfdManager::instance().inputRouter().pollAndRoute(
-            true, focused->provider.get(),
-            [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
-        );
-    }
+    MfdManager::instance().inputRouter().pollAndRoute(
+        focused != nullptr,
+        focused ? focused->provider.get() : nullptr,
+        [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+    );
 
     MfdManager::instance().render();
 }
