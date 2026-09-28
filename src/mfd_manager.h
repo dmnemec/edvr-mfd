@@ -57,6 +57,12 @@ public:
     void shutdown();
     bool isEnabled() const;
     void setEnabled(bool enabled) { m_enabled = enabled; }
+    bool showAllWindows() const;
+    void setShowAllWindows(bool show);
+    int activeDisplayCount() const;
+    void setActiveDisplayCount(int count);
+    bool isHeadLocked() const;
+    void setHeadLocked(bool locked);
     bool loadSettings();
     bool saveSettings();
 

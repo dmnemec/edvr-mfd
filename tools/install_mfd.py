@@ -11,7 +11,7 @@ import sys
 
 
 def find_game_dir(target_arg=None):
-    if target_arg:
+    if target_arg and target_arg.lower() not in ("steam", "frontier"):
         if os.path.isdir(target_arg):
             return os.path.abspath(target_arg)
         raise FileNotFoundError(f"Specified target directory not found: {target_arg}")
@@ -20,6 +20,7 @@ def find_game_dir(target_arg=None):
         r"D:\SteamLibrary\steamapps\common\Elite Dangerous\Products\elite-dangerous-odyssey-64",
         r"C:\Program Files (x86)\Steam\steamapps\common\Elite Dangerous\Products\elite-dangerous-odyssey-64",
         r"C:\SteamLibrary\steamapps\common\Elite Dangerous\Products\elite-dangerous-odyssey-64",
+        r"C:\Program Files (x86)\Frontier\EDLaunch\Products\elite-dangerous-odyssey-64",
     ]
     for p in default_paths:
         if os.path.isdir(p):

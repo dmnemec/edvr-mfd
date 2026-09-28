@@ -1001,6 +1001,55 @@ bool MfdManager::isEnabled() const {
     return edvr::Config::get().getBool("fix.cockpit_mfd", m_enabled);
 }
 
+bool MfdManager::showAllWindows() const {
+    if (m_slots.empty()) return false;
+    for (const auto& slot : m_slots) {
+        if (!slot.isVisible) return false;
+    }
+    return true;
+}
+
+void MfdManager::setShowAllWindows(bool show) {
+    for (auto& slot : m_slots) {
+        slot.isVisible = show;
+    }
+}
+
+int MfdManager::activeDisplayCount() const {
+    int count = 0;
+    for (const auto& slot : m_slots) {
+        if (slot.isVisible) count++;
+    }
+    return count > 0 ? count : 1;
+}
+
+void MfdManager::setActiveDisplayCount(int count) {
+    if (count < 1) count = 1;
+    if (count > 3) count = 3;
+    for (auto& slot : m_slots) {
+        if (slot.name == "main_mfd") {
+            slot.isVisible = (count >= 1);
+        } else if (slot.name == "left_mfd") {
+            slot.isVisible = (count >= 2);
+        } else if (slot.name == "right_mfd") {
+            slot.isVisible = (count >= 3);
+        }
+    }
+}
+
+bool MfdManager::isHeadLocked() const {
+    for (const auto& slot : m_slots) {
+        if (!slot.trackingLocked) return true;
+    }
+    return false;
+}
+
+void MfdManager::setHeadLocked(bool headLocked) {
+    for (auto& slot : m_slots) {
+        slot.trackingLocked = !headLocked;
+    }
+}
+
 bool MfdManager::initialize(int renderWidth, int renderHeight) {
     m_renderWidth = renderWidth;
     m_renderHeight = renderHeight;

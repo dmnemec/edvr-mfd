@@ -16,12 +16,102 @@ namespace edvr::mfd {
 
 namespace {
 
-int mfdPluginInit(void* /*hostReserved*/) {
+static const char* kDisplayChoices[] = {
+    "1 (Center)",
+    "2 (Center + Left)",
+    "3 (All Three)"
+};
+
+static int64_t getMfdEnabled(const char*, void*) {
+    return MfdManager::instance().isEnabled() ? 1 : 0;
+}
+static void setMfdEnabled(const char*, int64_t val, void*) {
+    MfdManager::instance().setEnabled(val != 0);
+}
+
+static int64_t getShowAll(const char*, void*) {
+    return MfdManager::instance().showAllWindows() ? 1 : 0;
+}
+static void setShowAll(const char*, int64_t val, void*) {
+    MfdManager::instance().setShowAllWindows(val != 0);
+}
+
+static int64_t getDisplayCount(const char*, void*) {
+    int c = MfdManager::instance().activeDisplayCount();
+    return (c >= 1 && c <= 3) ? (c - 1) : 0;
+}
+static void setDisplayCount(const char*, int64_t val, void*) {
+    MfdManager::instance().setActiveDisplayCount(static_cast<int>(val) + 1);
+}
+
+static int64_t getHeadLocked(const char*, void*) {
+    return MfdManager::instance().isHeadLocked() ? 1 : 0;
+}
+static void setHeadLocked(const char*, int64_t val, void*) {
+    MfdManager::instance().setHeadLocked(val != 0);
+}
+
+static void registerMfdSettings(const EdvrHostServices* host) {
+    if (!host || !host->registerSetting) return;
+
+    EdvrPluginSettingDef defEnabled{};
+    defEnabled.structSize = sizeof(EdvrPluginSettingDef);
+    defEnabled.header = "Cockpit MFD";
+    defEnabled.key = "cockpit_mfd_enabled";
+    defEnabled.label = "Cockpit MFD Displays";
+    defEnabled.hint = "Master toggle for in-cockpit MFD virtual displays.";
+    defEnabled.type = EDVR_PLUGIN_SETTING_BOOL;
+    defEnabled.defaultValue = 1;
+    defEnabled.getter = getMfdEnabled;
+    defEnabled.setter = setMfdEnabled;
+    host->registerSetting(&defEnabled);
+
+    EdvrPluginSettingDef defShowAll{};
+    defShowAll.structSize = sizeof(EdvrPluginSettingDef);
+    defShowAll.header = "Cockpit MFD";
+    defShowAll.key = "mfd_show_all";
+    defShowAll.label = "Show all windows";
+    defShowAll.hint = "Force all configured cockpit MFD displays to be visible.";
+    defShowAll.type = EDVR_PLUGIN_SETTING_BOOL;
+    defShowAll.defaultValue = 1;
+    defShowAll.getter = getShowAll;
+    defShowAll.setter = setShowAll;
+    host->registerSetting(&defShowAll);
+
+    EdvrPluginSettingDef defCount{};
+    defCount.structSize = sizeof(EdvrPluginSettingDef);
+    defCount.header = "Cockpit MFD";
+    defCount.key = "mfd_display_count";
+    defCount.label = "Active displays";
+    defCount.hint = "Select number of active cockpit MFD displays.";
+    defCount.type = EDVR_PLUGIN_SETTING_CHOICE;
+    defCount.choiceOptions = kDisplayChoices;
+    defCount.choiceCount = 3;
+    defCount.defaultValue = 2;
+    defCount.getter = getDisplayCount;
+    defCount.setter = setDisplayCount;
+    host->registerSetting(&defCount);
+
+    EdvrPluginSettingDef defLocked{};
+    defLocked.structSize = sizeof(EdvrPluginSettingDef);
+    defLocked.header = "Cockpit MFD";
+    defLocked.key = "mfd_head_locked";
+    defLocked.label = "Head-locked HUD";
+    defLocked.hint = "Attach displays to VR head orientation instead of cockpit 3D space.";
+    defLocked.type = EDVR_PLUGIN_SETTING_BOOL;
+    defLocked.defaultValue = 0;
+    defLocked.getter = getHeadLocked;
+    defLocked.setter = setHeadLocked;
+    host->registerSetting(&defLocked);
+}
+
+int mfdPluginInit(const EdvrHostServices* host) {
     edvr::Log::get().init(edvr::executableDirectory() + L"\\edvr_logs");
     edvr::Config::get().init(edvr::executableDirectory());
     bool enabled = edvr::Config::get().getBool("fix.cockpit_mfd", true);
     MfdManager::instance().initialize(512, 384);
     MfdManager::instance().setEnabled(enabled);
+    registerMfdSettings(host);
     Log::get().note("mfd_plugin: initialized Cockpit MFD Addon v1.0 (enabled=%d)\n", enabled ? 1 : 0);
     return 0;
 }

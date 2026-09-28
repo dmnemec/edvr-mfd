@@ -1,0 +1,5 @@
+feat: register MFD settings into EDVR F8 menu Plugins tab
+
+- Register 'Cockpit MFD Displays', 'Show all windows', 'Active displays', and 'Head-locked HUD' with EdvrHostServices on initialize.
+- Add showAllWindows, activeDisplayCount, and headLocked accessors to MfdManager.
+- Update tools/install_mfd.py to support steam/frontier keyword target aliases.
