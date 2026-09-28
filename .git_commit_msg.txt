@@ -1,4 +1,0 @@
-docs: add comprehensive MFD plugin & display authoring guide
-
-- Add docs/mfd-authoring-guide.md detailing the JSON display schema, tab layouts (list, keyvalue, text), hotkeys/HOTAS inputs, clipboard copy, and events.jsonl bidirectional integration.
-- Update README.md with links to authoring documentation and updated plugins/edvr_mfd/plugin.dll directory structure.
