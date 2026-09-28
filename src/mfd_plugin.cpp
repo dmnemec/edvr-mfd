@@ -18,7 +18,7 @@ namespace {
 
 int mfdPluginInit(void* /*hostReserved*/) {
     edvr::Config::get().init(edvr::executableDirectory());
-    bool enabled = edvr::Config::get().getBool("fix.cockpit_mfd", false);
+    bool enabled = edvr::Config::get().getBool("fix.cockpit_mfd", true);
     MfdManager::instance().initialize(512, 384);
     MfdManager::instance().setEnabled(enabled);
     Log::get().note("mfd_plugin: initialized Cockpit MFD Addon v1.0 (enabled=%d)\n", enabled ? 1 : 0);
@@ -32,7 +32,7 @@ void mfdPluginShutdown() {
 
 void mfdPluginUpdate(const EdvrPosef* headPose, float dtSeconds) {
     if (!headPose) return;
-    bool enabled = edvr::Config::get().getBool("fix.cockpit_mfd", false);
+    bool enabled = edvr::Config::get().getBool("fix.cockpit_mfd", true);
     MfdManager::instance().setEnabled(enabled);
     if (!enabled) return;
 

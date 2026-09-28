@@ -786,19 +786,46 @@ void MfdManager::ensureDefaultSlots() {
     loadSettings();
 }
 
+static std::wstring getMfdPluginDir() {
+    HMODULE hMod = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&getMfdPluginDir), &hMod) && hMod) {
+        wchar_t path[MAX_PATH]{};
+        if (GetModuleFileNameW(hMod, path, MAX_PATH) > 0) {
+            wchar_t* lastSlash = wcsrchr(path, L'\\');
+            if (lastSlash) {
+                *lastSlash = L'\0';
+                return std::wstring(path);
+            }
+        }
+    }
+    return edvr::executableDirectory() + L"\\plugins\\edvr_mfd";
+}
+
 static std::wstring getMfdIniPath() {
-    std::wstring exeDir = edvr::executableDirectory();
-    std::wstring pluginsDir = exeDir + L"\\plugins";
-    CreateDirectoryW(pluginsDir.c_str(), nullptr);
-    return pluginsDir + L"\\edvr_mfd.ini";
+    std::wstring pluginDir = getMfdPluginDir();
+    CreateDirectoryW(pluginDir.c_str(), nullptr);
+    std::wstring settingsIni = pluginDir + L"\\settings.ini";
+    if (GetFileAttributesW(settingsIni.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return settingsIni;
+    }
+    std::wstring legacyIni = edvr::executableDirectory() + L"\\plugins\\edvr_mfd.ini";
+    if (GetFileAttributesW(legacyIni.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return legacyIni;
+    }
+    return settingsIni;
 }
 
 static std::wstring getMfdLocalAppDataIniPath() {
     wchar_t localAppData[MAX_PATH]{};
     if (GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH)) {
-        std::wstring dir = std::wstring(localAppData) + L"\\EDVR";
-        CreateDirectoryW(dir.c_str(), nullptr);
-        return dir + L"\\edvr_mfd.ini";
+        std::wstring edvrDir = std::wstring(localAppData) + L"\\EDVR";
+        std::wstring pluginsDir = edvrDir + L"\\plugins";
+        std::wstring mfdDir = pluginsDir + L"\\edvr_mfd";
+        CreateDirectoryW(edvrDir.c_str(), nullptr);
+        CreateDirectoryW(pluginsDir.c_str(), nullptr);
+        CreateDirectoryW(mfdDir.c_str(), nullptr);
+        return mfdDir + L"\\settings.ini";
     }
     return L"";
 }
