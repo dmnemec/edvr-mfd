@@ -25,11 +25,11 @@ if not exist "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" (
 call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul
 
 :compiler_found
-if not exist "build" mkdir build
-if not exist "build\plugins" mkdir build\plugins
+if not exist "build\plugins\edvr_mfd" mkdir "build\plugins\edvr_mfd"
+if not exist "build\plugins\edvr_mfd\displays" mkdir "build\plugins\edvr_mfd\displays"
 
 set CXXFLAGS=/std:c++17 /O2 /W4 /WX- /EHsc /MD /Iinclude /Isrc /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /DEDVR_PLUGIN_EXPORTS
-set LDFLAGS=/DLL /OUT:build\plugins\edvr_mfd.dll d3d11.lib dxgi.lib d3dcompiler.lib user32.lib shell32.lib ole32.lib winmm.lib
+set LDFLAGS=/DLL /OUT:build\plugins\edvr_mfd\plugin.dll d3d11.lib dxgi.lib d3dcompiler.lib user32.lib shell32.lib ole32.lib winmm.lib
 
 cl %CXXFLAGS% src\mfd_plugin.cpp src\mfd_manager.cpp src\mfd_renderer.cpp src\mfd_gaze_tracker.cpp src\mfd_input_router.cpp src\mfd_provider.cpp src\mfd_font.cpp /link %LDFLAGS%
 
@@ -38,5 +38,5 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [edvr-mfd] SUCCESS: build\plugins\edvr_mfd.dll created.
+echo [edvr-mfd] SUCCESS: build\plugins\edvr_mfd\plugin.dll created.
 exit /b 0
