@@ -17,6 +17,57 @@ Use the **PowerShell tool**, not Bash. Windows PowerShell 5.1 (same host machine
 - **Verify install**: compare PE timestamp of installed `plugins\edvr_mfd\plugin.dll` against the build output.
 - **Host requirement**: The EDVR host (`edvr-unofficial-patch` repo, `feat/plugin-architecture` branch) must also be installed for the plugin to load. Use `python tools\install_edvr.py --target ...` from that repo.
 
+## EDVR host repo relationship
+
+The MFD plugin runs inside the EDVR host DLL (`d3d11.dll`). Understanding the host is required for any fix touching input, rendering, or the plugin ABI.
+
+| Item | Detail |
+|---|---|
+| **Upstream repo** | `https://github.com/characterecho-sean/edvr-unofficial-patch` (the EDVR project) |
+| **Local path** | `c:\Users\csasn\github.com\characterecho-sean\edvr-unofficial-patch` |
+| **Active branch** | `feat/plugin-architecture` — adds plugin loading, `PluginManager`, and the F8 menu Plugins tab |
+| **Build** | `cmd /c "c:\Users\csasn\github.com\characterecho-sean\edvr-unofficial-patch\build.bat"` (absolute path) |
+| **Install** | `python tools\install_edvr.py --target <game_dir>` from the EDVR repo root |
+| **Verify** | `python tools\install_edvr.py --target <game_dir> --verify-only` |
+
+### Key host files relevant to the MFD plugin
+
+| File | Relevance |
+|---|---|
+| `src/plugins/plugin_manager.cpp` | Loads `plugin.dll`, calls all lifecycle callbacks, dispatches `onFilterInput` |
+| `src/d3d11/input_gate.cpp` | Three-door keyboard gate. `g_private` blocks during F8 menu. `g_pluginBlock` blocks when a plugin (MFD) holds keyboard focus. |
+| `src/d3d11/input_gate.h` | Gate public API: `inputGateSetPluginBlock(bool)` (added for MFD-001). |
+| `src/openxr/d3d11_stereo.cpp` | Render loop: calls `onUpdate` (~line 518), `onRenderEye` (~line 540), and after MFD-001 fix, `onFilterInput` + `inputGateSetPluginBlock` per frame. |
+| `include/edvr_plugin_api.h` | Plugin ABI header — the canonical copy. Mirror any changes to `edvr-mfd/include/edvr_plugin_api.h`. |
+
+### Keyboard gate architecture (MFD-001 context)
+
+Elite Dangerous reads the keyboard through exactly three doors (measured from the EXE import table):
+1. **DirectInput8 keyboard device** — `GetDeviceState` / `GetDeviceData` vtable hooks
+2. **user32 trio** — IAT hooks on `GetAsyncKeyState`, `GetKeyState`, `GetKeyboardState`
+3. **PeekMessageA** — IAT hook; keyboard messages become `WM_NULL` in place
+
+All three check `g_private` (F8 menu open) and `g_pluginBlock` (plugin keyboard focus). Both are `std::atomic`. Setting either makes the gate return all-keys-up to the game. The gate is fail-open: a door that faults retires to pass-through for the session.
+
+**Plugin keyboard suppression flow (MFD-001)**:
+1. Each frame: `d3d11_stereo.cpp` calls `PluginManager::instance().onFilterInput(0, nullptr)`
+2. `onFilterInput` calls each plugin's `mfdPluginFilterInput` → plugin checks `MfdManager::focusedSlot()`
+3. If any plugin returns `swallowInput = 1`, `onFilterInput` returns `true`
+4. `d3d11_stereo.cpp` calls `inputGateSetPluginBlock(true/false)`
+5. All three gate doors block keyboard input for that frame
+
+**When editing `input_gate.cpp`**: always add checks to ALL four hooks — `hookGetAsyncKeyState`, `hookGetKeyState`, `hookGetKeyboardState`, and `hookPeekMessageA`. Missing one door leaves a leak.
+
+### Cross-repo workflow
+
+When a fix requires changes in both repos (new ABI field, host-side gate fix, etc.):
+1. Make host changes on `feat/plugin-architecture` in the EDVR repo.
+2. Build EDVR via absolute path (see above).
+3. Install EDVR: `python tools\install_edvr.py --target <game_dir>`.
+4. Build and install MFD.
+5. Test flight. Verify both installed DLL PE timestamps match their builds.
+6. Commit both repos. Push both. Task is not done until both pushes confirmed.
+
 ## Layout
 
 | Path | What |
