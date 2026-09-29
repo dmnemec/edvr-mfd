@@ -1,6 +1,6 @@
 # EDVR MFD Plugin — working notes for coding agents
 
-An EDVR plugin — a Windows DLL (`plugin.dll`) loaded by the EDVR host (`d3d11.dll`) at game startup. It renders floating MFD (Multi-Function Display) panels in VR using the game's D3D11 pipeline, fed by Elite Dangerous telemetry via shared memory.
+An EDVR plugin — a Windows DLL (`plugin.dll`) loaded by the EDVR host (`d3d11.dll`) built for [EDVR (edvr-unofficial-patch)](https://github.com/characterecho-sean/edvr-unofficial-patch) at game startup. It renders floating MFD (Multi-Function Display) panels in VR using the game's D3D11 pipeline, fed by Elite Dangerous telemetry via shared memory.
 
 The expensive resource on this project is not tokens, it is **test flights**. Every wrong hypothesis costs a build, an install, a headset session and a log. Everything below exists to spend fewer of them.
 
@@ -23,7 +23,7 @@ The MFD plugin runs inside the EDVR host DLL (`d3d11.dll`). Understanding the ho
 
 | Item | Detail |
 |---|---|
-| **Upstream repo** | `https://github.com/characterecho-sean/edvr-unofficial-patch` (the EDVR project) |
+| **EDVR Host repo** | `https://github.com/characterecho-sean/edvr-unofficial-patch` (source repo) |
 | **Local path** | `c:\Users\csasn\github.com\characterecho-sean\edvr-unofficial-patch` |
 | **Active branch** | `feat/plugin-architecture` — adds plugin loading, `PluginManager`, and the F8 menu Plugins tab |
 | **Build** | `cmd /c "c:\Users\csasn\github.com\characterecho-sean\edvr-unofficial-patch\build.bat"` (absolute path) |
