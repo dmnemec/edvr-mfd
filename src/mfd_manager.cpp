@@ -583,16 +583,19 @@ void MfdManager::ensureDefaultSlots() {
         "}";
         auto providerCenter = std::make_unique<DeclarativeMfdProvider>("main_mfd", "SPANSH ROUTER");
         providerCenter->loadFromJson(jsonCenter);
-        providerCenter->setActionCallback([prov = providerCenter.get()](const std::string& itemId, const std::string& itemLabel) {
+        providerCenter->setActionCallback([](const std::string& itemId, const std::string& itemLabel) {
             if (!itemLabel.empty()) {
                 copyToClipboard(itemLabel);
-                auto* tab = prov->viewModel().currentTab();
-                if (tab && tab->type == MfdTabType::kList) {
-                    for (auto& it : tab->items) {
-                        if (it.id == itemId) {
-                            it.badge = "COPIED";
-                            it.badgeColor = palette::kSuccessGreen;
-                            break;
+                auto* slot = MfdManager::instance().findSlot("main_mfd");
+                if (slot && slot->provider) {
+                    auto* tab = slot->provider->viewModel().currentTab();
+                    if (tab && tab->type == MfdTabType::kList) {
+                        for (auto& it : tab->items) {
+                            if (it.id == itemId) {
+                                it.badge = "COPIED";
+                                it.badgeColor = palette::kSuccessGreen;
+                                break;
+                            }
                         }
                     }
                 }
@@ -610,8 +613,8 @@ void MfdManager::ensureDefaultSlots() {
             slot0->activityMask = kActivityAlways;
             if (slot0->provider && slot0->provider->type() == MfdProviderType::kDeclarativeJson) {
                 auto* decl = static_cast<DeclarativeMfdProvider*>(slot0->provider.get());
-                decl->setKeyValueActionCallback([name = std::string("main_mfd")](const std::string& /*tabTitle*/, int /*index*/, const std::string& key, int adjustDelta) {
-                    auto* s = MfdManager::instance().findSlot(name);
+                decl->setKeyValueActionCallback([](const std::string& /*tabTitle*/, int /*index*/, const std::string& key, int adjustDelta) {
+                    auto* s = MfdManager::instance().findSlot("main_mfd");
                     if (s) handleSettingsAdjustment(*s, key, adjustDelta);
                 });
             }
@@ -706,8 +709,8 @@ void MfdManager::ensureDefaultSlots() {
             slot1->activityMask = kActivityShip | kActivityFighter;
             if (slot1->provider && slot1->provider->type() == MfdProviderType::kDeclarativeJson) {
                 auto* decl = static_cast<DeclarativeMfdProvider*>(slot1->provider.get());
-                decl->setKeyValueActionCallback([name = std::string("left_mfd")](const std::string& /*tabTitle*/, int /*index*/, const std::string& key, int adjustDelta) {
-                    auto* s = MfdManager::instance().findSlot(name);
+                decl->setKeyValueActionCallback([](const std::string& /*tabTitle*/, int /*index*/, const std::string& key, int adjustDelta) {
+                    auto* s = MfdManager::instance().findSlot("left_mfd");
                     if (s) handleSettingsAdjustment(*s, key, adjustDelta);
                 });
             }
@@ -764,8 +767,8 @@ void MfdManager::ensureDefaultSlots() {
             slot2->activityMask = kActivityAlways;
             if (slot2->provider && slot2->provider->type() == MfdProviderType::kDeclarativeJson) {
                 auto* decl = static_cast<DeclarativeMfdProvider*>(slot2->provider.get());
-                decl->setKeyValueActionCallback([name = std::string("right_mfd")](const std::string& /*tabTitle*/, int /*index*/, const std::string& key, int adjustDelta) {
-                    auto* s = MfdManager::instance().findSlot(name);
+                decl->setKeyValueActionCallback([](const std::string& /*tabTitle*/, int /*index*/, const std::string& key, int adjustDelta) {
+                    auto* s = MfdManager::instance().findSlot("right_mfd");
                     if (s) handleSettingsAdjustment(*s, key, adjustDelta);
                 });
             }

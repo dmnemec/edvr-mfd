@@ -115,7 +115,9 @@ public:
                 if (tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->keyValues.size())) {
                     int delta = hasAction(action, MfdInputAction::kRight) ? 1 : -1;
                     if (m_kvActionCallback) {
-                        m_kvActionCallback(tab->title, tab->selectedIndex, tab->keyValues[tab->selectedIndex].key, delta);
+                        try {
+                            m_kvActionCallback(tab->title, tab->selectedIndex, tab->keyValues[tab->selectedIndex].key, delta);
+                        } catch (...) {}
                     }
                     return true;
                 }
@@ -128,14 +130,18 @@ public:
                     if (tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->items.size())) {
                         const auto& item = tab->items[tab->selectedIndex];
                         if (m_actionCallback) {
-                            m_actionCallback(item.id, item.label);
+                            try {
+                                m_actionCallback(item.id, item.label);
+                            } catch (...) {}
                         }
                         return true;
                     }
                 } else if (tab->type == MfdTabType::kKeyValue && !tab->keyValues.empty()) {
                     if (tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->keyValues.size())) {
                         if (m_kvActionCallback) {
-                            m_kvActionCallback(tab->title, tab->selectedIndex, tab->keyValues[tab->selectedIndex].key, 1);
+                            try {
+                                m_kvActionCallback(tab->title, tab->selectedIndex, tab->keyValues[tab->selectedIndex].key, 1);
+                            } catch (...) {}
                         }
                         return true;
                     }

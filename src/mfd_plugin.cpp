@@ -22,32 +22,32 @@ static const char* kDisplayChoices[] = {
     "3 (All Three)"
 };
 
-static int64_t getMfdEnabled(const char*, void*) {
+static int64_t EDVR_API getMfdEnabled(const char*, void*) {
     return MfdManager::instance().isEnabled() ? 1 : 0;
 }
-static void setMfdEnabled(const char*, int64_t val, void*) {
+static void EDVR_API setMfdEnabled(const char*, int64_t val, void*) {
     MfdManager::instance().setEnabled(val != 0);
 }
 
-static int64_t getShowAll(const char*, void*) {
+static int64_t EDVR_API getShowAll(const char*, void*) {
     return MfdManager::instance().showAllWindows() ? 1 : 0;
 }
-static void setShowAll(const char*, int64_t val, void*) {
+static void EDVR_API setShowAll(const char*, int64_t val, void*) {
     MfdManager::instance().setShowAllWindows(val != 0);
 }
 
-static int64_t getDisplayCount(const char*, void*) {
+static int64_t EDVR_API getDisplayCount(const char*, void*) {
     int c = MfdManager::instance().activeDisplayCount();
     return (c >= 1 && c <= 3) ? (c - 1) : 0;
 }
-static void setDisplayCount(const char*, int64_t val, void*) {
+static void EDVR_API setDisplayCount(const char*, int64_t val, void*) {
     MfdManager::instance().setActiveDisplayCount(static_cast<int>(val) + 1);
 }
 
-static int64_t getHeadLocked(const char*, void*) {
+static int64_t EDVR_API getHeadLocked(const char*, void*) {
     return MfdManager::instance().isHeadLocked() ? 1 : 0;
 }
-static void setHeadLocked(const char*, int64_t val, void*) {
+static void EDVR_API setHeadLocked(const char*, int64_t val, void*) {
     MfdManager::instance().setHeadLocked(val != 0);
 }
 
@@ -105,7 +105,7 @@ static void registerMfdSettings(const EdvrHostServices* host) {
     host->registerSetting(&defLocked);
 }
 
-int mfdPluginInit(const EdvrHostServices* host) {
+int EDVR_API mfdPluginInit(const EdvrHostServices* host) {
     edvr::Log::get().init(edvr::executableDirectory() + L"\\edvr_logs");
     edvr::Config::get().init(edvr::executableDirectory());
     bool enabled = edvr::Config::get().getBool("fix.cockpit_mfd", true);
@@ -116,12 +116,15 @@ int mfdPluginInit(const EdvrHostServices* host) {
     return 0;
 }
 
-void mfdPluginShutdown() {
+void EDVR_API mfdPluginShutdown() {
     MfdManager::instance().shutdown();
     Log::get().note("mfd_plugin: shutdown Cockpit MFD Addon\n");
+    // Explicitly close the log before the DLL unloads so Win32 HANDLE cleanup
+    // happens here, not in the static destructor during CRT teardown.
+    Log::get().close();
 }
 
-void mfdPluginUpdate(const EdvrPosef* headPose, float dtSeconds) {
+void EDVR_API mfdPluginUpdate(const EdvrPosef* headPose, float dtSeconds) {
     if (!headPose) return;
     bool enabled = edvr::Config::get().getBool("fix.cockpit_mfd", true);
     MfdManager::instance().setEnabled(enabled);
@@ -143,7 +146,7 @@ void mfdPluginUpdate(const EdvrPosef* headPose, float dtSeconds) {
     MfdManager::instance().render();
 }
 
-void mfdPluginRenderEye(const EdvrEyeRenderContext* eyeCtx) {
+void EDVR_API mfdPluginRenderEye(const EdvrEyeRenderContext* eyeCtx) {
     if (!eyeCtx || !eyeCtx->device || !eyeCtx->context || !eyeCtx->rtv) return;
     if (!MfdManager::instance().isEnabled()) return;
 
@@ -170,7 +173,7 @@ void mfdPluginRenderEye(const EdvrEyeRenderContext* eyeCtx) {
     );
 }
 
-void mfdPluginFilterInput(EdvrInputContext* inputCtx) {
+void EDVR_API mfdPluginFilterInput(EdvrInputContext* inputCtx) {
     if (!inputCtx || !MfdManager::instance().isEnabled()) return;
 
     auto* focused = MfdManager::instance().focusedSlot();
@@ -185,7 +188,7 @@ void mfdPluginFilterInput(EdvrInputContext* inputCtx) {
 
 } // namespace edvr::mfd
 
-extern "C" __declspec(dllexport) int EdvrPluginRegister(uint32_t hostApiVersion, EdvrPluginCallbacks* outCallbacks) {
+extern "C" __declspec(dllexport) int EDVR_API EdvrPluginRegister(uint32_t hostApiVersion, EdvrPluginCallbacks* outCallbacks) {
     if (hostApiVersion != EDVR_PLUGIN_API_VERSION || !outCallbacks) {
         return -1; // Version mismatch or invalid buffer
     }
