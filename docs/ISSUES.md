@@ -1,15 +1,15 @@
 # EDVR MFD — Issue & Bug Tracker
 
 ## Status
-- **Active Open Issues**: 3 (2 High Priority, 1 Medium Priority)
-- **Resolved Issues**: 2
-- **Last Updated**: 2026-09-28
+- **Active Open Issues**: 2 (1 High Priority, 1 Medium Priority)
+- **Resolved Issues**: 3
+- **Last Updated**: 2026-09-29
 - **Jump to Section**:
   - [Open Issues](#open-issues)
-    - [MFD-001: Keyboard input not suppressed while MFD has focus](#mfd-001--keyboard-input-not-suppressed-while-mfd-has-focus)
     - [MFD-002: Joystick/vJoy input not suppressed while MFD has focus](#mfd-002--joystickvjoy-input-not-suppressed-while-mfd-has-focus)
     - [MFD-003: Cockpit MFD panels visible while in Galaxy Map](#mfd-003--cockpit-mfd-panels-visible-while-in-galaxy-map)
   - [Resolved Issues](#resolved)
+    - [MFD-001: Keyboard input not suppressed while MFD has focus](#mfd-001--keyboard-input-not-suppressed-while-mfd-has-focus)
     - [MFD-R001: DLL unload crash (0xc0000409 in is_stream_flushable_or_commitable)](#mfd-r001--dll-unload-crash-0xc0000409-in-is_stream_flushable_or_commitable)
     - [MFD-R002: Calling convention mismatch (__cdecl vs __stdcall) causing stack corruption](#mfd-r002--calling-convention-mismatch-__cdecl-vs-__stdcall-causing-stack-corruption)
 
@@ -19,27 +19,8 @@
 
 | ID | Priority | Title | Suspected Area | Status |
 |---|---|---|---|---|
-| **MFD-001** | High | Keyboard input not suppressed while MFD has focus | `src/mfd_input_router.cpp` | Open |
 | **MFD-002** | High | Joystick/vJoy input not suppressed while MFD has focus | `src/mfd_input_router.cpp` | Open |
 | **MFD-003** | Medium | Cockpit MFD panels visible while in Galaxy Map | `src/mfd_manager.cpp`, `include/mfd_telemetry.h` | Open |
-
-### MFD-001 | Keyboard input not suppressed while MFD has focus
-
-- **ID**: MFD-001
-- **Priority**: High
-- **Title**: Keyboard input not suppressed while MFD has focus
-- **Date Reported**: 2026-09-28
-- **Description**:
-  When an MFD panel is focused (receiving gaze/input), keyboard keystrokes still pass through to Elite Dangerous. Expected behavior is that keyboard input mapped to or captured by the MFD should be swallowed and not forwarded to the game while the MFD maintains focus.
-- **Reproduction Steps**:
-  1. Look directly at an MFD panel in VR to acquire gaze focus.
-  2. Press keys bound to MFD navigation (e.g., arrow keys, UI select, or custom bound keys).
-  3. Observe that game controls (such as ship menus, throttle, or landing gear) trigger concurrently with MFD navigation actions.
-- **Suspected Area of Code**:
-  - `src/mfd_input_router.cpp` — `filterInput` callback / keyboard interception logic.
-  - `src/mfd_plugin.cpp` (`mfdPluginFilterInput` / `onFilterInput`) and the host hook dispatch in EDVR's `d3d11.dll`.
-
----
 
 ### MFD-002 | Joystick/vJoy input not suppressed while MFD has focus
 
@@ -80,6 +61,22 @@
 ---
 
 ## Resolved
+
+### MFD-001 | Keyboard input not suppressed while MFD has focus
+
+- **ID**: MFD-001
+- **Fixed Date**: 2026-09-29
+- **Commits**: `059cf4c3` (edvr-unofficial-patch `feat/plugin-architecture`), no MFD plugin changes needed
+- **Root Cause**:
+  The plugin's `mfdPluginFilterInput` correctly set `swallowInput = 1` when a panel had gaze focus, and `PluginManager::onFilterInput` correctly returned `true`. However, `inputGateSetPluginBlock` did not exist — the result was never fed to the keyboard gate, so all three keyboard doors (`GetAsyncKeyState`, `GetKeyState`/`GetKeyboardState`, `PeekMessageA`) remained open.
+- **Fix** (in `edvr-unofficial-patch`):
+  - Added `std::atomic<bool> g_pluginBlock` in `input_gate.cpp`, independent of `g_private` (the F8 menu flag).
+  - Added `g_pluginBlock` check to all four keyboard hooks in `input_gate.cpp`.
+  - Exported `inputGateSetPluginBlock(bool)` from `input_gate.cpp` / `input_gate.h`.
+  - In `menu.cpp`: include `plugin_manager.h`; after each `inputGateTick()` call, query `PluginManager::onFilterInput(0, nullptr)` and pass result to `inputGateSetPluginBlock`. Also clear it in the fault path (`g_budget` retired) so a faulting tick cannot strand the keyboard taken.
+- **No MFD plugin changes required**: `mfdPluginFilterInput` already worked correctly.
+
+---
 
 ### MFD-R001 | DLL unload crash (0xc0000409 in is_stream_flushable_or_commitable)
 
