@@ -323,7 +323,15 @@ int test_plugin_input_filter_suppression() {
     TEST_CHECK(callbacks.onFilterInput != nullptr, "onFilterInput callback registered");
 
     callbacks.onFilterInput(&inputCtx);
-    TEST_CHECK(inputCtx.swallowInput == 1, "Plugin input filter set swallowInput = 1 when MFD focused");
+    TEST_CHECK(inputCtx.swallowInput == 1, "Plugin input filter set swallowInput = 1 when MFD focused (Keyboard)");
+
+    // Test DirectInput Joystick device type (deviceType = 1)
+    EdvrInputContext joyCtx{};
+    joyCtx.structSize = sizeof(EdvrInputContext);
+    joyCtx.deviceType = 1; // DirectInput Joystick
+    joyCtx.swallowInput = 0;
+    callbacks.onFilterInput(&joyCtx);
+    TEST_CHECK(joyCtx.swallowInput == 1, "Plugin input filter set swallowInput = 1 when MFD focused (Joystick/HOTAS)");
 
     mgr.shutdown();
     return 0;
