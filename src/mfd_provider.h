@@ -91,7 +91,7 @@ public:
     }
 
     bool onInput(MfdInputAction action) override {
-        m_model.isFocused = true;
+        if (!m_model.isFocused) return false;
 
         if (hasAction(action, MfdInputAction::kNextTab)) {
             m_model.cycleNextTab();

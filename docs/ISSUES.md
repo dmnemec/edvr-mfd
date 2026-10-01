@@ -21,10 +21,10 @@
 
 | ID | Priority | Title | Suspected Area | Status |
 |---|---|---|---|---|
-| **MFD-001** | High | Keyboard & HOTAS input suppression failing in latest build | `src/d3d11/input_gate.cpp`, `src/mfd_input_router.cpp` | Open (Reopened) |
-| **MFD-002** | High | Joystick/vJoy input not suppressed while MFD has focus | `src/mfd_input_router.cpp` | Open |
+| **MFD-001** | High | Keyboard & HOTAS input suppression failing in latest build | `src/d3d11/input_gate.cpp`, `src/mfd_input_router.cpp` | In Progress |
+| **MFD-002** | High | Joystick/vJoy input not suppressed while MFD has focus | `src/mfd_input_router.cpp`, `src/d3d11/input_gate.cpp` | In Progress |
 | **MFD-003** | Medium | Cockpit MFD panels visible while in Galaxy Map | `src/mfd_manager.cpp`, `include/mfd_telemetry.h` | Open |
-| **MFD-004** | High | UP navigation input (keyboard & HOTAS hat switch) not captured | `src/mfd_input_router.cpp` | Open |
+| **MFD-004** | High | UP navigation input (keyboard & HOTAS hat switch) not captured | `src/mfd_input_router.cpp` | In Progress |
 | **MFD-005** | Medium | F8 Plugins menu toggles reset to default immediately upon navigation change | `src/menu/plugins_page.cpp`, `src/plugins/plugin_manager.cpp` (in EDVR host) / `src/mfd_plugin.cpp` | Open |
 
 ### MFD-001 | Keyboard & HOTAS input suppression failing in latest build

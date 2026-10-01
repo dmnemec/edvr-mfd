@@ -11,8 +11,6 @@
 
 namespace edvr::mfd {
 
-namespace {
-
 int parseEliteKey(const std::string& keyStr) {
     if (keyStr.empty()) return 0;
     if (keyStr == "Key_Space") return VK_SPACE;
@@ -20,10 +18,10 @@ int parseEliteKey(const std::string& keyStr) {
     if (keyStr == "Key_Enter" || keyStr == "Key_Return") return VK_RETURN;
     if (keyStr == "Key_Escape") return VK_ESCAPE;
     if (keyStr == "Key_Tab") return VK_TAB;
-    if (keyStr == "Key_UpArrow") return VK_UP;
-    if (keyStr == "Key_DownArrow") return VK_DOWN;
-    if (keyStr == "Key_LeftArrow") return VK_LEFT;
-    if (keyStr == "Key_RightArrow") return VK_RIGHT;
+    if (keyStr == "Key_UpArrow" || keyStr == "Key_Up") return VK_UP;
+    if (keyStr == "Key_DownArrow" || keyStr == "Key_Down") return VK_DOWN;
+    if (keyStr == "Key_LeftArrow" || keyStr == "Key_Left") return VK_LEFT;
+    if (keyStr == "Key_RightArrow" || keyStr == "Key_Right") return VK_RIGHT;
 
     // Direct single letter / number keys (e.g. "Key_W", "Key_S", "Key_A", "Key_D", "Key_C", "Key_Z", "Key_E", "Key_Q")
     if (keyStr.rfind("Key_", 0) == 0 && keyStr.size() == 5) {
@@ -42,14 +40,15 @@ void parseDeviceKey(const std::string& device, const std::string& key, MfdAction
         int vk = parseEliteKey(key);
         if (vk > 0) binding.addVk(vk);
     } else if (device.find("Joy") != std::string::npos || device == "vJoy" || device == "GamePad") {
-        // Check for POV directions: e.g. "Joy_POV1Up", "Joy_POV1Down", "Joy_POV1Left", "Joy_POV1Right"
-        if (key.find("POV") != std::string::npos && key.find("Up") != std::string::npos) {
+        // Check for POV / Hat directions: e.g. "Joy_POV1Up", "Joy_POV1Down", "POV1Up", "Hat1Up", etc.
+        bool hasPovOrHat = (key.find("POV") != std::string::npos || key.find("Hat") != std::string::npos);
+        if (hasPovOrHat && (key.find("Up") != std::string::npos || key.find("UP") != std::string::npos)) {
             binding.povUp = true;
-        } else if (key.find("POV") != std::string::npos && key.find("Down") != std::string::npos) {
+        } else if (hasPovOrHat && (key.find("Down") != std::string::npos || key.find("DOWN") != std::string::npos)) {
             binding.povDown = true;
-        } else if (key.find("POV") != std::string::npos && key.find("Left") != std::string::npos) {
+        } else if (hasPovOrHat && (key.find("Left") != std::string::npos || key.find("LEFT") != std::string::npos)) {
             binding.povLeft = true;
-        } else if (key.find("POV") != std::string::npos && key.find("Right") != std::string::npos) {
+        } else if (hasPovOrHat && (key.find("Right") != std::string::npos || key.find("RIGHT") != std::string::npos)) {
             binding.povRight = true;
         } else if (key.rfind("Joy_", 0) == 0) {
             // e.g. "Joy_4", "Joy_25"
@@ -60,6 +59,8 @@ void parseDeviceKey(const std::string& device, const std::string& key, MfdAction
         }
     }
 }
+
+namespace {
 
 std::string extractAttribute(const std::string& line, const std::string& attrName) {
     std::string needle = attrName + "=\"";
@@ -214,7 +215,7 @@ void MfdInputRouter::pollJoystickInputs(bool& up, bool& down, bool& left, bool& 
         ji.dwFlags = JOY_RETURNALL;
         if (joyGetPosEx(i, &ji) == JOYERR_NOERROR) {
             // Check POV Hat (dwPOV: hundredths of degrees, 65535 = centered)
-            if (ji.dwPOV != 65535 && ji.dwPOV <= 35900) {
+            if (ji.dwPOV != 65535 && ji.dwPOV <= 36000) {
                 if (ji.dwPOV >= 31500 || ji.dwPOV <= 4500) {
                     if (m_bindings.up.povUp) up = true;
                 }

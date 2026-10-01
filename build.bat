@@ -48,6 +48,21 @@ if %errorlevel% neq 0 (
 
 echo [edvr-mfd] SUCCESS: build\plugins\edvr_mfd\plugin.dll created.
 
+echo [edvr-mfd] Building and running unit tests...
+set TEST_CXXFLAGS=/std:c++17 /O2 /EHsc /MT /Fo:build\obj\ /Iinclude /Isrc /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /DEDVR_PLUGIN_EXPORTS
+set TEST_LDFLAGS=d3d11.lib dxgi.lib d3dcompiler.lib user32.lib shell32.lib ole32.lib winmm.lib
+cl %TEST_CXXFLAGS% tools\mfd_test\mfd_test.cpp src\mfd_plugin.cpp src\mfd_manager.cpp src\mfd_renderer.cpp src\mfd_gaze_tracker.cpp src\mfd_input_router.cpp src\mfd_provider.cpp src\mfd_font.cpp /link %TEST_LDFLAGS% /OUT:build\mfd_test.exe
+if %errorlevel% neq 0 (
+    echo [edvr-mfd] ERROR: Test compilation failed.
+    exit /b 1
+)
+
+build\mfd_test.exe
+if %errorlevel% neq 0 (
+    echo [edvr-mfd] ERROR: Unit tests failed.
+    exit /b 1
+)
+
 if "%1"=="--install" (
     echo [edvr-mfd] Installing to game directory...
     python tools\install_mfd.py

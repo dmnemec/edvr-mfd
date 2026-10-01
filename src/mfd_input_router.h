@@ -8,6 +8,8 @@
 
 namespace edvr::mfd {
 
+int parseEliteKey(const std::string& keyStr);
+
 // Single UI action binding mapping multiple keyboard virtual keys, joystick buttons, and POV hats.
 struct MfdActionBinding {
     std::vector<int> vkeys;
@@ -27,6 +29,8 @@ struct MfdActionBinding {
         }
     }
 };
+
+void parseDeviceKey(const std::string& device, const std::string& key, MfdActionBinding& binding);
 
 // Complete binding set for cockpit MFD UI navigation.
 struct MfdBindingsConfig {

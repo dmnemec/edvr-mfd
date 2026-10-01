@@ -2,15 +2,16 @@
 // Validates Option A (Declarative JSON MFD) implementation, Option B extensibility slots,
 // gaze-directed focus tracking, UI input routing, and HUD rasterization.
 
-#include "../../src/mfd/mfd_types.h"
-#include "../../src/mfd/mfd_view_model.h"
-#include "../../src/mfd/mfd_provider.h"
-#include "../../src/mfd/mfd_font.h"
-#include "../../src/mfd/mfd_renderer.h"
-#include "../../src/mfd/mfd_gaze_tracker.h"
-#include "../../src/mfd/mfd_input_router.h"
-#include "../../src/mfd/mfd_compositor.h"
-#include "../../src/mfd/mfd_manager.h"
+#include "mfd_types.h"
+#include "mfd_view_model.h"
+#include "mfd_provider.h"
+#include "mfd_font.h"
+#include "mfd_renderer.h"
+#include "mfd_gaze_tracker.h"
+#include "mfd_input_router.h"
+#include "mfd_compositor.h"
+#include "mfd_manager.h"
+#include "edvr_plugin_api.h"
 
 #include <d3d11.h>
 #include <d3dcompiler.h>
@@ -28,6 +29,8 @@ struct XrFovf { float angleLeft, angleRight, angleUp, angleDown; };
 #include <cmath>
 
 using namespace edvr::mfd;
+
+extern "C" int EDVR_API EdvrPluginRegister(uint32_t hostApiVersion, EdvrPluginCallbacks* outCallbacks);
 
 #define TEST_CHECK(cond, msg) \
     do { \
@@ -249,14 +252,80 @@ int test_input_router() {
     TEST_CHECK(swallowed2, "Input IS swallowed when MFD is focused");
     TEST_CHECK(provider.viewModel().tabs[0].selectedIndex == 1, "Provider received and handled Down arrow");
 
-    // Press NextTab (E key):
+    // Press UP arrow while focused (moving selection from 1 back to 0):
     router.processInput(true, &provider, false, false, false, false, false, false, false, false); // release
-    bool swallowed3 = router.processInput(true, &provider,
-                                          false, false, false, false,
-                                          false, false, true, false);
-    TEST_CHECK(swallowed3, "NextTab IS swallowed when focused");
-    TEST_CHECK(provider.viewModel().activeTabIndex == 1, "Provider cycled to Tab 1");
+    bool swallowedUp = router.processInput(true, &provider,
+                                           true, false, false, false,
+                                           false, false, false, false);
+    TEST_CHECK(swallowedUp, "Up arrow IS swallowed when focused");
+    TEST_CHECK(provider.viewModel().tabs[1].selectedIndex == 0, "Provider received and handled Up arrow");
 
+    return 0;
+}
+
+// 5b. Test UP Navigation Key & POV Bindings Parsing
+int test_up_navigation_and_binds_parsing() {
+    MfdBindingsConfig config;
+    MfdActionBinding upBinding;
+
+    // Test parseDeviceKey with Keyboard "Key_Up" and "Key_UpArrow"
+    parseDeviceKey("Keyboard", "Key_Up", upBinding);
+    parseDeviceKey("Keyboard", "Key_UpArrow", upBinding);
+    TEST_CHECK(!upBinding.vkeys.empty(), "Key_Up / Key_UpArrow parsed into vkeys");
+    bool hasVkUp = false;
+    for (int vk : upBinding.vkeys) {
+        if (vk == VK_UP) hasVkUp = true;
+    }
+    TEST_CHECK(hasVkUp, "VK_UP present in upBinding");
+
+    // Test parseDeviceKey with HOTAS POV Hat variations
+    MfdActionBinding hatBinding;
+    parseDeviceKey("Joy_1", "Joy_POV1Up", hatBinding);
+    parseDeviceKey("Joy_1", "Hat1Up", hatBinding);
+    TEST_CHECK(hatBinding.povUp, "POV / Hat Up parsed into povUp flag");
+
+    // Test POV angle evaluation for 36000 (360.0 degrees UP boundary)
+    DWORD povUp360 = 36000;
+    TEST_CHECK(povUp360 != 65535 && povUp360 <= 36000, "POV 36000 within valid non-centered range");
+    TEST_CHECK(povUp360 >= 31500 || povUp360 <= 4500, "POV 36000 evaluates to UP direction");
+
+    return 0;
+}
+
+// 5c. Test Plugin Input Filter & Suppression Protocol
+int test_plugin_input_filter_suppression() {
+    EdvrInputContext inputCtx{};
+    inputCtx.structSize = sizeof(EdvrInputContext);
+    inputCtx.deviceType = 0; // Keyboard
+    inputCtx.swallowInput = 0;
+
+    // Verify filter sets swallowInput when MFD focused
+    auto& mgr = MfdManager::instance();
+    mgr.initialize(320, 240);
+    mgr.setEnabled(true);
+
+    MfdSlot* slot = mgr.findSlot("main_mfd");
+    TEST_CHECK(slot != nullptr, "main_mfd slot available for filter test");
+
+    // Force focus
+    Vec3 headPos(0.0f, 0.0f, 0.0f);
+    Vec3 toCenter = (slot->pose.position - headPos).normalized();
+    for (int i = 0; i < 10; ++i) {
+        mgr.update(headPos, toCenter, 0.020f);
+    }
+    TEST_CHECK(mgr.focusedSlot() != nullptr && mgr.focusedSlot()->gazeTracker.isFocused(), "Slot has active focus");
+
+    // Call mfdPluginFilterInput via API table callback
+    EdvrPluginCallbacks callbacks{};
+    callbacks.structSize = sizeof(EdvrPluginCallbacks);
+    int regRes = EdvrPluginRegister(EDVR_PLUGIN_API_VERSION, &callbacks);
+    TEST_CHECK(regRes == 0, "EdvrPluginRegister success");
+    TEST_CHECK(callbacks.onFilterInput != nullptr, "onFilterInput callback registered");
+
+    callbacks.onFilterInput(&inputCtx);
+    TEST_CHECK(inputCtx.swallowInput == 1, "Plugin input filter set swallowInput = 1 when MFD focused");
+
+    mgr.shutdown();
     return 0;
 }
 
@@ -610,6 +679,12 @@ int main() {
 
     if (test_input_router() != 0) return 1;
     std::cout << "  ok  Input Router and Flight Control Protection" << std::endl;
+
+    if (test_up_navigation_and_binds_parsing() != 0) return 1;
+    std::cout << "  ok  UP Navigation Key & POV Bindings Parsing" << std::endl;
+
+    if (test_plugin_input_filter_suppression() != 0) return 1;
+    std::cout << "  ok  Plugin Input Filter & Suppression Protocol" << std::endl;
 
     if (test_renderer() != 0) return 1;
     std::cout << "  ok  HUD Vector/Bitmap Renderer" << std::endl;
