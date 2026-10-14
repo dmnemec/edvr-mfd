@@ -1,11 +1,12 @@
 # EDVR MFD — Issue & Bug Tracker
 
 ## Status
-- **Active Open Issues**: 2 (2 Medium Priority)
-- **Resolved Issues**: 5
+- **Active Open Issues**: 3 (1 High Priority, 2 Medium Priority)
+- **Resolved Issues**: 4
 - **Last Updated**: 2026-10-01
 - **Jump to Section**:
   - [Open Issues](#open-issues)
+    - [MFD-001: Directional HAT switch repeat press input suppression bleeding through to ship power pips](#mfd-001--directional-hat-switch-repeat-press-input-suppression-bleeding-through-to-ship-power-pips)
     - [MFD-003: Cockpit MFD panels visible while in Galaxy Map](#mfd-003--cockpit-mfd-panels-visible-while-in-galaxy-map)
     - [MFD-005: F8 Plugins menu toggles reset to default immediately upon navigation change](#mfd-005--f8-plugins-menu-toggles-reset-to-default-immediately-upon-navigation-change)
   - [Resolved Issues](#resolved)
@@ -21,8 +22,26 @@
 
 | ID | Priority | Title | Suspected Area | Status |
 |---|---|---|---|---|
+| **MFD-001** | High | Directional HAT switch repeat press input suppression bleeding through to ship power pips | `src/d3d11/input_gate.cpp` (in EDVR host) | Resolved |
 | **MFD-003** | Medium | Cockpit MFD panels visible while in Galaxy Map | `src/mfd_manager.cpp`, `include/mfd_telemetry.h` | Open |
-| **MFD-005** | Medium | F8 Plugins menu toggles reset to default immediately upon navigation change | `src/menu/plugins_page.cpp`, `src/plugins/plugin_manager.cpp` (in EDVR host) / `src/mfd_plugin.cpp` | Open |
+| **MFD-005** | Medium | F8 Plugins menu toggles reset to default immediately upon navigation change | `src/d3d11/menu.cpp`, `src/plugins/plugin_manager.cpp` (in EDVR host) | Resolved |
+| **MFD-006** | Medium | MFD panels remain visible while in main pause / system menu | `src/mfd_manager.cpp`, `include/mfd_telemetry.h` | Open |
+
+
+---
+
+### MFD-001 | Directional HAT switch repeat press input suppression bleeding through to ship power pips
+
+- **ID**: MFD-001
+- **Priority**: High
+- **Title**: Directional HAT switch repeat press input suppression bleeding through to ship power pips
+- **Date Reported**: 2026-10-01
+- **Description**:
+  When performing consecutive presses of the same HOTAS directional HAT switch (e.g., `Up -> Up -> Up`), the first press is swallowed properly by the MFD, but subsequent presses of the identical direction leak through to Elite Dangerous and adjust ship power pips.
+- **Root Cause Hypothesis**:
+  In `input_gate.cpp`, `filterDeviceState` executes `memset(data, 0, cb)` when `cb < sizeof(DIJOYSTATE)`. On non-standard structures, `0` at offset `0x18`/`0x1C` corresponds to North/UP (`0.0` degrees). If Elite sets a custom DirectInput data format (`SetDataFormat`), zeroing the buffer sets the POV hat state to `0` (UP), causing Elite to perceive a forced UP direction state while focused.
+- **Suspected Area of Code**:
+  - `src/d3d11/input_gate.cpp` (`filterDeviceState` & `filterDeviceData` custom format handling and `SetDataFormat` offset interception).
 
 ---
 

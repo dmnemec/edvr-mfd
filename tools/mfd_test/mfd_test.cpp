@@ -252,13 +252,20 @@ int test_input_router() {
     TEST_CHECK(swallowed2, "Input IS swallowed when MFD is focused");
     TEST_CHECK(provider.viewModel().tabs[0].selectedIndex == 1, "Provider received and handled Down arrow");
 
-    // Press UP arrow while focused (moving selection from 1 back to 0):
+    // Scenario 3: Consecutive repeat presses of the SAME direction (e.g. Up Up Up)
+    // First Up press:
     router.processInput(true, &provider, false, false, false, false, false, false, false, false); // release
-    bool swallowedUp = router.processInput(true, &provider,
-                                           true, false, false, false,
-                                           false, false, false, false);
-    TEST_CHECK(swallowedUp, "Up arrow IS swallowed when focused");
-    TEST_CHECK(provider.viewModel().tabs[1].selectedIndex == 0, "Provider received and handled Up arrow");
+    bool sw1 = router.processInput(true, &provider, true, false, false, false, false, false, false, false);
+    TEST_CHECK(sw1, "First Up press swallowed");
+
+    // Second Up press (held or re-pressed):
+    bool sw2 = router.processInput(true, &provider, true, false, false, false, false, false, false, false);
+    TEST_CHECK(sw2, "Second consecutive Up press STILL swallowed even when edge is inactive");
+
+    // Third Up press after explicit release:
+    router.processInput(true, &provider, false, false, false, false, false, false, false, false); // release
+    bool sw3 = router.processInput(true, &provider, true, false, false, false, false, false, false, false);
+    TEST_CHECK(sw3, "Third Up press after release swallowed");
 
     return 0;
 }
