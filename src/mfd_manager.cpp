@@ -113,20 +113,30 @@ struct EliteStatusData {
 };
 
 EliteStatusData readEliteStatus() {
-    EliteStatusData data;
     // When running in standalone test rigs outside the game, simulate an active cockpit
     if (GetModuleHandleW(L"EliteDangerous64.exe") == nullptr) {
+        EliteStatusData data;
         data.flags = (1 << 24) | (1 << 3); // MainShip + ShieldsUp
         return data;
     }
 
+    static EliteStatusData s_lastData;
+    static uint64_t s_lastReadTick = 0;
+    uint64_t now = GetTickCount64();
+    if (now - s_lastReadTick < 50 && s_lastData.flags != 0) {
+        return s_lastData;
+    }
+
     std::wstring statusPath = getSavedGamesEliteDir() + L"\\Status.json";
     std::ifstream f(statusPath);
-    if (!f.is_open()) return data;
+    if (!f.is_open()) return s_lastData;
 
     std::stringstream buffer;
     buffer << f.rdbuf();
     std::string s = buffer.str();
+    if (s.empty()) return s_lastData;
+
+    EliteStatusData data;
 
     // Parse Pips: [x, y, z]
     size_t pipsPos = s.find("\"Pips\":");
@@ -183,6 +193,11 @@ EliteStatusData readEliteStatus() {
         if (sscanf_s(s.c_str() + flagsPos + 8, "%u", &fl) == 1) {
             data.flags = fl;
         }
+    }
+
+    if (data.flags != 0) {
+        s_lastData = data;
+        s_lastReadTick = now;
     }
 
     return data;
@@ -531,6 +546,9 @@ MfdManager::~MfdManager() {
 }
 
 void MfdManager::ensureDefaultSlots() {
+    if (m_defaultSlotsCreated) return;
+    m_defaultSlotsCreated = true;
+
     int requestedSlots = edvr::Config::get().getInt("fix.mfd_slots", 1);
     if (requestedSlots < 1) requestedSlots = 1;
     if (requestedSlots > 3) requestedSlots = 3;
@@ -1001,53 +1019,49 @@ bool MfdManager::saveSettings() {
 }
 
 bool MfdManager::isEnabled() const {
-    return edvr::Config::get().getBool("fix.cockpit_mfd", m_enabled);
+    return m_enabled;
 }
 
 bool MfdManager::showAllWindows() const {
-    if (m_slots.empty()) return false;
-    for (const auto& slot : m_slots) {
-        if (!slot.isVisible) return false;
-    }
-    return true;
+    return m_showAllWindows;
 }
 
 void MfdManager::setShowAllWindows(bool show) {
+    m_showAllWindows = show;
     for (auto& slot : m_slots) {
-        slot.isVisible = show;
+        if (show) {
+            slot.isVisible = true;
+        } else {
+            if (slot.name == "main_mfd") slot.isVisible = (m_activeDisplayCount >= 1);
+            else if (slot.name == "left_mfd") slot.isVisible = (m_activeDisplayCount >= 2);
+            else if (slot.name == "right_mfd") slot.isVisible = (m_activeDisplayCount >= 3);
+        }
     }
 }
 
 int MfdManager::activeDisplayCount() const {
-    int count = 0;
-    for (const auto& slot : m_slots) {
-        if (slot.isVisible) count++;
-    }
-    return count > 0 ? count : 1;
+    return m_activeDisplayCount;
 }
 
 void MfdManager::setActiveDisplayCount(int count) {
     if (count < 1) count = 1;
     if (count > 3) count = 3;
-    for (auto& slot : m_slots) {
-        if (slot.name == "main_mfd") {
-            slot.isVisible = (count >= 1);
-        } else if (slot.name == "left_mfd") {
-            slot.isVisible = (count >= 2);
-        } else if (slot.name == "right_mfd") {
-            slot.isVisible = (count >= 3);
+    m_activeDisplayCount = count;
+    if (!m_showAllWindows) {
+        for (auto& slot : m_slots) {
+            if (slot.name == "main_mfd") slot.isVisible = (count >= 1);
+            else if (slot.name == "left_mfd") slot.isVisible = (count >= 2);
+            else if (slot.name == "right_mfd") slot.isVisible = (count >= 3);
         }
     }
 }
 
 bool MfdManager::isHeadLocked() const {
-    for (const auto& slot : m_slots) {
-        if (!slot.trackingLocked) return true;
-    }
-    return false;
+    return m_headLocked;
 }
 
 void MfdManager::setHeadLocked(bool headLocked) {
+    m_headLocked = headLocked;
     for (auto& slot : m_slots) {
         slot.trackingLocked = !headLocked;
     }
@@ -1059,7 +1073,7 @@ bool MfdManager::initialize(int renderWidth, int renderHeight) {
 
     edvr::Config::get().init(edvr::executableDirectory());
     ensureDefaultSlots();
-    m_enabled = edvr::Config::get().getBool("fix.cockpit_mfd", false);
+    m_enabled = true;
     Log::get().note("mfd: initialized renderSize=(%dx%d), enabled=%d, default_slots=%zu\n",
                     m_renderWidth, m_renderHeight, isEnabled() ? 1 : 0, m_slots.size());
 
@@ -1072,6 +1086,7 @@ bool MfdManager::initialize(int renderWidth, int renderHeight) {
 
 void MfdManager::shutdown() {
     m_slots.clear();
+    m_defaultSlotsCreated = false;
     if (m_compositor) {
         m_compositor->shutdown();
     }
@@ -1116,9 +1131,7 @@ MfdSlot* MfdManager::focusedSlot() {
 }
 
 void MfdManager::update(const Vec3& headPos, const Vec3& headForward, float dtSeconds) {
-    edvr::Config::get().reloadIfChanged();
-    m_enabled = edvr::Config::get().getBool("fix.cockpit_mfd", m_enabled);
-    if (!isEnabled()) return;
+    if (!m_enabled) return;
     ensureDefaultSlots();
 
     m_lastHeadPos = headPos;
@@ -1256,6 +1269,45 @@ void MfdManager::renderToEyeRtv(ID3D11Device* device, ID3D11DeviceContext* conte
     UINT prevSampleMask = 0;
     context->OMGetBlendState(&prevBlendState, prevBlendFactor, &prevSampleMask);
 
+    ComPtr<ID3D11DepthStencilState> prevDepthStencilState;
+    UINT prevStencilRef = 0;
+    context->OMGetDepthStencilState(&prevDepthStencilState, &prevStencilRef);
+
+    ComPtr<ID3D11RasterizerState> prevRasterizerState;
+    context->RSGetState(&prevRasterizerState);
+
+    ComPtr<ID3D11InputLayout> prevInputLayout;
+    context->IAGetInputLayout(&prevInputLayout);
+
+    D3D11_PRIMITIVE_TOPOLOGY prevTopology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
+    context->IAGetPrimitiveTopology(&prevTopology);
+
+    ComPtr<ID3D11VertexShader> prevVs;
+    context->VSGetShader(&prevVs, nullptr, nullptr);
+
+    ComPtr<ID3D11PixelShader> prevPs;
+    context->PSGetShader(&prevPs, nullptr, nullptr);
+
+    ComPtr<ID3D11Buffer> prevVsCb;
+    context->VSGetConstantBuffers(0, 1, &prevVsCb);
+
+    ComPtr<ID3D11Buffer> prevPsCb;
+    context->PSGetConstantBuffers(0, 1, &prevPsCb);
+
+    ComPtr<ID3D11SamplerState> prevSampler;
+    context->PSGetSamplers(0, 1, &prevSampler);
+
+    ComPtr<ID3D11ShaderResourceView> prevSrv;
+    context->PSGetShaderResources(0, 1, &prevSrv);
+
+    UINT numVp = 1;
+    D3D11_VIEWPORT prevVp{};
+    context->RSGetViewports(&numVp, &prevVp);
+
+    ComPtr<ID3D11RenderTargetView> prevRtv;
+    ComPtr<ID3D11DepthStencilView> prevDsv;
+    context->OMGetRenderTargets(1, &prevRtv, &prevDsv);
+
     if (m_blendState) {
         context->OMSetBlendState(m_blendState.Get(), nullptr, 0xFFFFFFFF);
     }
@@ -1373,9 +1425,27 @@ void MfdManager::renderToEyeRtv(ID3D11Device* device, ID3D11DeviceContext* conte
         context->Draw(6, 0);
     }
 
-    if (prevBlendState) {
-        context->OMSetBlendState(prevBlendState.Get(), prevBlendFactor, prevSampleMask);
+    // Full state restoration
+    context->OMSetBlendState(prevBlendState.Get(), prevBlendFactor, prevSampleMask);
+    context->OMSetDepthStencilState(prevDepthStencilState.Get(), prevStencilRef);
+    context->RSSetState(prevRasterizerState.Get());
+    context->IASetInputLayout(prevInputLayout.Get());
+    context->IASetPrimitiveTopology(prevTopology);
+    context->VSSetShader(prevVs.Get(), nullptr, 0);
+    context->PSSetShader(prevPs.Get(), nullptr, 0);
+    ID3D11Buffer* vsCbPtr = prevVsCb.Get();
+    context->VSSetConstantBuffers(0, 1, &vsCbPtr);
+    ID3D11Buffer* psCbPtr = prevPsCb.Get();
+    context->PSSetConstantBuffers(0, 1, &psCbPtr);
+    ID3D11SamplerState* sampPtr = prevSampler.Get();
+    context->PSSetSamplers(0, 1, &sampPtr);
+    ID3D11ShaderResourceView* srvPtr = prevSrv.Get();
+    context->PSSetShaderResources(0, 1, &srvPtr);
+    if (numVp > 0) {
+        context->RSSetViewports(numVp, &prevVp);
     }
+    ID3D11RenderTargetView* rtvPtr = prevRtv.Get();
+    context->OMSetRenderTargets(1, &rtvPtr, prevDsv.Get());
 }
 
 const XrCompositionLayerBaseHeader* MfdManager::getOpenXrLayerHeader() {

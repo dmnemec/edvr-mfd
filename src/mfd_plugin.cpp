@@ -126,9 +126,7 @@ void EDVR_API mfdPluginShutdown() {
 
 void EDVR_API mfdPluginUpdate(const EdvrPosef* headPose, float dtSeconds) {
     if (!headPose) return;
-    bool enabled = edvr::Config::get().getBool("fix.cockpit_mfd", true);
-    MfdManager::instance().setEnabled(enabled);
-    if (!enabled) return;
+    if (!MfdManager::instance().isEnabled()) return;
 
     Vec3 headPos(headPose->position.x, headPose->position.y, headPose->position.z);
     Quat headRot(headPose->orientation.x, headPose->orientation.y, headPose->orientation.z, headPose->orientation.w);

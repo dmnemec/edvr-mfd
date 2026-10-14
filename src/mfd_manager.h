@@ -120,7 +120,11 @@ public:
     }
 
 private:
-    bool m_enabled = false;
+    bool m_enabled = true;
+    bool m_showAllWindows = true;
+    int m_activeDisplayCount = 2;
+    bool m_headLocked = false;
+    bool m_defaultSlotsCreated = false;
     int m_renderWidth = 512;
     int m_renderHeight = 384;
     DebugStats m_debugStats;
