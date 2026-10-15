@@ -15,7 +15,7 @@ Use the **PowerShell tool**, not Bash. Windows PowerShell 5.1 (same host machine
 - **Build**: `cmd /c "C:\Users\csasn\github.com\dmnemec\edvr-mfd\build.bat"` (must run by absolute path)
 - **Install**: `python "C:\Users\csasn\github.com\dmnemec\edvr-mfd\tools\install_mfd.py" --target "D:\SteamLibrary\steamapps\common\Elite Dangerous\Products\elite-dangerous-odyssey-64"`
 - **Verify install**: compare PE timestamp of installed `plugins\edvr_mfd\plugin.dll` against the build output.
-- **Host requirement**: The EDVR host (`edvr-unofficial-patch` repo, `feat/plugin-architecture` branch) must also be installed for the plugin to load. Use `python tools\install_edvr.py --target ...` from that repo.
+- **Host requirement**: The EDVR host (`edvr-unofficial-patch` repo, `feat/third-party-plugins` branch) must also be installed for the plugin to load. Use `python tools\install_edvr.py --target ...` from that repo.
 
 ## EDVR host repo relationship
 
@@ -25,7 +25,7 @@ The MFD plugin runs inside the EDVR host DLL (`d3d11.dll`). Understanding the ho
 |---|---|
 | **EDVR Host repo** | `https://github.com/characterecho-sean/edvr-unofficial-patch` (source repo) |
 | **Local path** | `c:\Users\csasn\github.com\characterecho-sean\edvr-unofficial-patch` |
-| **Active branch** | `feat/plugin-architecture` — adds plugin loading, `PluginManager`, and the F8 menu Plugins tab |
+| **Active branch** | `feat/third-party-plugins` — adds plugin loading, `PluginManager`, and the F8 menu Plugins tab |
 | **Build** | `cmd /c "c:\Users\csasn\github.com\characterecho-sean\edvr-unofficial-patch\build.bat"` (absolute path) |
 | **Install** | `python tools\install_edvr.py --target <game_dir>` from the EDVR repo root |
 | **Verify** | `python tools\install_edvr.py --target <game_dir> --verify-only` |
@@ -61,7 +61,7 @@ All three check `g_private` (F8 menu open) and `g_pluginBlock` (plugin keyboard 
 ### Cross-repo workflow
 
 When a fix requires changes in both repos (new ABI field, host-side gate fix, etc.):
-1. Make host changes on `feat/plugin-architecture` in the EDVR repo.
+1. Make host changes on `feat/third-party-plugins` in the EDVR repo.
 2. Build EDVR via absolute path (see above).
 3. Install EDVR: `python tools\install_edvr.py --target <game_dir>`.
 4. Build and install MFD.

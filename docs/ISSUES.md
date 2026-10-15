@@ -23,8 +23,8 @@
 
 | ID | Priority | Title | Suspected Area | Status |
 |---|---|---|---|---|
-| **MFD-003** | Medium | Cockpit MFD panels visible while in Galaxy Map | `src/mfd_manager.cpp`, `include/mfd_telemetry.h` | Open |
-| **MFD-006** | Medium | MFD panels remain visible while in main pause / system menu | `src/mfd_manager.cpp`, `include/mfd_telemetry.h` | Open |
+| **MFD-003** | Medium | Cockpit MFD panels visible while in Galaxy Map | `src/mfd_context.cpp`, `src/mfd_manager.cpp` | In Progress (Resolving via ContextEvaluator §7) |
+| **MFD-006** | Medium | MFD panels remain visible while in main pause / system menu | `src/mfd_plugin.cpp`, `src/mfd_manager.cpp` | In Progress (Resolving via "Hide All" toggle §7.4, D1) |
 
 ---
 
@@ -34,17 +34,11 @@
 - **Priority**: Medium
 - **Title**: Cockpit MFD panels visible while in Galaxy Map
 - **Date Reported**: 2026-09-28
+- **Status**: In Progress
 - **Description**:
-  MFD panels rendered in cockpit 3D space remain visible when the player opens the Galaxy Map (or System Map). The Galaxy Map is a separate game state where cockpit-bound MFDs should not render (or should be rendered separately in map space).
-- **Reproduction Steps**:
-  1. Launch Elite Dangerous Odyssey in VR with MFD plugin enabled.
-  2. Enter cockpit flight mode and confirm MFD panels are rendering.
-  3. Open the Galaxy Map or System Map.
-  4. Observe that the cockpit 3D MFD quads remain visible floating over or within the map space.
-- **Suspected Area of Code**:
-  - `src/mfd_manager.cpp` — `update()` / `render()` — lack of game-state awareness.
-  - `include/mfd_telemetry.h` (`MfdSharedState`) — shared-memory feed from Elite should expose a `gameMode` or similar flag.
-  - *Note*: Requires investigation to confirm whether telemetry exposes a game-mode enum or whether status flags need to be extracted from Elite's `Status.json` or memory hooks.
+  MFD panels rendered in cockpit 3D space remain visible when the player opens the Galaxy Map (or System Map). The Galaxy Map is a separate game state where cockpit-bound MFDs should not render.
+- **Resolution Plan**:
+  Addressed by `ContextEvaluator` (design doc §7) reading `GuiFocus` from `Status.json`. Galaxy Map (GuiFocus=6), System Map (7), Orrery (8), FSS (9), SAA (10), Codex (11) are added to the global exclusion list, automatically hiding MFDs.
 
 ---
 
@@ -54,10 +48,11 @@
 - **Priority**: Medium
 - **Title**: MFD panels remain visible while in main pause / system menu
 - **Date Reported**: 2026-10-01
+- **Status**: In Progress
 - **Description**:
-  When hitting ESC to bring up the main pause menu, cockpit 3D MFD panels remain active and rendered behind the pause menu.
-- **Suspected Area of Code**:
-  - `src/mfd_manager.cpp` (vehicle activity gating and title/pause screen suppression).
+  When hitting ESC to bring up the main pause menu, cockpit 3D MFD panels remain active and rendered behind/over the pause menu.
+- **Resolution Plan**:
+  Per user decision, avoid fragile reverse engineering of game pause internals. Resolved by introducing an explicit **"Hide All"** toggle (`mfd_hide_all_toggle`) under Cockpit MFD in F8 settings (and optional ini hotkey), allowing the pilot to immediately clear all MFDs on demand.
 
 ---
 
