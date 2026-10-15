@@ -73,6 +73,14 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+echo [edvr-mfd] Building native install_mfd.exe...
+if not exist "build\tools" mkdir "build\tools"
+wsl -- bash -lc "cd /mnt/c/Users/csasn/github.com/dmnemec/edvr-mfd/companion && GOOS=windows GOARCH=amd64 /usr/local/bin/go build -trimpath -ldflags='-s -w' -o ../build/tools/install_mfd.exe ./cmd/installer"
+if %errorlevel% neq 0 (
+    echo [edvr-mfd] ERROR: Failed to build native install_mfd.exe
+    exit /b 1
+)
+
 if "%1"=="--install" (
     echo [edvr-mfd] Installing to game directory...
     python tools\install_mfd.py

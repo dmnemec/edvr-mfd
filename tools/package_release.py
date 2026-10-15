@@ -136,6 +136,12 @@ def create_release_zip(repo_root, output_zip_path, skip_validate=False):
             zf.write(authoring_guide_path, "docs/mfd-authoring-guide.md")
             items_added.append("docs/mfd-authoring-guide.md")
 
+        # 5. Native Windows auto-installer
+        installer_exe = os.path.join(repo_root, "build", "tools", "install_mfd.exe")
+        if os.path.isfile(installer_exe):
+            zf.write(installer_exe, "install_mfd.exe")
+            items_added.append("install_mfd.exe")
+
     zip_size = os.path.getsize(output_zip_path)
     print(f"[package_release] Successfully created {output_zip_path} ({zip_size} bytes, {len(items_added)} files)")
     return output_zip_path, items_added

@@ -55,7 +55,20 @@ The MFD addon integrates directly into the EDVR F8 in-headset menu under **Cockp
 
 ## Installation
 
-### Option A: Automated Tool (Recommended)
+### Option A: One-Click Native Installer (Zero Dependencies)
+Download and unzip `edvr-mfd-v1.0.0.zip`, then double-click `install_mfd.exe`:
+- **Auto-Detects**: Scans the Windows Registry and Steam library folders (`libraryfolders.vdf`), Epic Games, Frontier Launchers, and common drives to locate your Elite Dangerous Odyssey folder automatically.
+- **Verifies EDVR**: Confirms the EDVR host (`d3d11.dll`) is installed.
+- **Zero Python Required**: Single standalone Windows executable.
+
+You can also run it from the command line:
+```cmd
+install_mfd.exe
+install_mfd.exe --dry-run
+install_mfd.exe --target "D:\SteamLibrary\steamapps\common\Elite Dangerous\Products\elite-dangerous-odyssey-64"
+```
+
+### Option B: Python Tool (Developers / Repo Clone)
 After building or cloning:
 ```cmd
 python tools\install_mfd.py --target steam
@@ -66,8 +79,8 @@ Flags available:
 - `--verify-only`: Verify installed plugin and packages match build artifacts.
 - `--force`: Force overwrite bundled packages even if target version is >= repo version.
 
-### Option B: Release ZIP Archive
-Download `edvr-mfd-v1.0.0.zip` from releases and extract directly into your Elite Dangerous product folder:
+### Option C: Manual Extraction
+Extract the contents of `edvr-mfd-v1.0.0.zip` directly into your Elite Dangerous product folder:
 ```text
 <Elite Dangerous Odyssey Product Folder>\
     d3d11.dll
