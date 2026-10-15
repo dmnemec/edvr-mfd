@@ -13,7 +13,7 @@
       "file": "screens/ship.json",
       "title": "SHIP READOUT",
       "pose": {
-        "position": [-0.28, -0.22, 0.55],
+        "position": [-0.45, -0.22, -0.48],
         "pitchDeg": -22.0,
         "yawDeg": 32.0,
         "widthM": 0.24,

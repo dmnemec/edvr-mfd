@@ -179,10 +179,12 @@ bool MfdManager::migrateLegacyIni(const std::wstring& iniPath) {
     static const MigrationPair s_pairs[] = {
         { L"main_mfd", L"route/route" },
         { L"slot.main_mfd", L"route/route" },
-        { L"left_mfd", L"ship/power" },
-        { L"slot.left_mfd", L"ship/power" },
-        { L"right_mfd", L"exploration/bio" },
-        { L"slot.right_mfd", L"exploration/bio" }
+        { L"left_mfd", L"ship/ship" },
+        { L"slot.left_mfd", L"ship/ship" },
+        { L"ship/power", L"ship/ship" },
+        { L"right_mfd", L"exploration/exploration" },
+        { L"slot.right_mfd", L"exploration/exploration" },
+        { L"exploration/bio", L"exploration/exploration" }
     };
 
     bool anyMigrated = false;

@@ -20,7 +20,13 @@ struct MfdManifestPose {
 
     MfdPose toMfdPose() const {
         MfdPose p;
-        p.position = Vec3(position[0], position[1], position[2]);
+        // In OpenXR seated space, forward is negative Z. If a manifest specifies positive Z,
+        // invert it so the screen is positioned in front of the viewer.
+        float z = position[2];
+        if (z > 0.0f) {
+            z = -z;
+        }
+        p.position = Vec3(position[0], position[1], z);
         p.orientation = Quat::fromEulerDegrees(pitchDeg, yawDeg, rollDeg);
         p.widthM = widthM;
         p.heightM = heightM;

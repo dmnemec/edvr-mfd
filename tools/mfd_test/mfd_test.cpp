@@ -2630,10 +2630,10 @@ int test_dynamic_screens_cap_and_settings() {
     TEST_CHECK(wcscmp(checkBuf, L"-0.1234") == 0, "route/route pos_x migrated");
     GetPrivateProfileStringW(L"route/route", L"scale", L"", checkBuf, 64, testIni.c_str());
     TEST_CHECK(wcscmp(checkBuf, L"1.25") == 0, "route/route scale migrated");
-    GetPrivateProfileStringW(L"ship/power", L"pos_x", L"", checkBuf, 64, testIni.c_str());
-    TEST_CHECK(wcscmp(checkBuf, L"-0.4500") == 0, "ship/power pos_x migrated");
-    GetPrivateProfileStringW(L"exploration/bio", L"pos_x", L"", checkBuf, 64, testIni.c_str());
-    TEST_CHECK(wcscmp(checkBuf, L"0.4500") == 0, "exploration/bio pos_x migrated");
+    GetPrivateProfileStringW(L"ship/ship", L"pos_x", L"", checkBuf, 64, testIni.c_str());
+    TEST_CHECK(wcscmp(checkBuf, L"-0.4500") == 0, "ship/ship pos_x migrated");
+    GetPrivateProfileStringW(L"exploration/exploration", L"pos_x", L"", checkBuf, 64, testIni.c_str());
+    TEST_CHECK(wcscmp(checkBuf, L"0.4500") == 0, "exploration/exploration pos_x migrated");
 
     // Second run must be no-op (targets exist)
     bool migratedAgain = MfdManager::migrateLegacyIni(testIni);
