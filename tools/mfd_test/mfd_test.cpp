@@ -416,6 +416,22 @@ int test_manager() {
     TEST_CHECK(mgr.focusedSlot() == slot, "Main MFD is now the focused slot");
     TEST_CHECK(slot->provider->viewModel().isFocused, "Provider view model reflects focused state");
 
+    // Test Show All Windows gaze fade override (MFD-007)
+    slot->autoHideUntilGaze = true;
+    mgr.setShowAllWindows(false);
+    Vec3 lookAway(0.0f, 1.0f, 0.0f);
+    for (int i = 0; i < 20; ++i) {
+        mgr.update(headPos, lookAway, 0.050f);
+    }
+    TEST_CHECK(slot->currentAlpha < 0.5f, "Slot fades out when not focused with showAllWindows=false");
+
+    mgr.setShowAllWindows(true);
+    TEST_CHECK(slot->currentAlpha == 1.0f, "setShowAllWindows(true) immediately resets currentAlpha to 1.0");
+    for (int i = 0; i < 20; ++i) {
+        mgr.update(headPos, lookAway, 0.050f);
+    }
+    TEST_CHECK(slot->currentAlpha == 1.0f, "Show all windows maintains full alpha regardless of gaze");
+
     // Execute render cycle
     mgr.render();
     mgr.shutdown();

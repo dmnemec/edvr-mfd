@@ -1031,6 +1031,7 @@ void MfdManager::setShowAllWindows(bool show) {
     for (auto& slot : m_slots) {
         if (show) {
             slot.isVisible = true;
+            slot.currentAlpha = 1.0f;
         } else {
             if (slot.name == "main_mfd") slot.isVisible = (m_activeDisplayCount >= 1);
             else if (slot.name == "left_mfd") slot.isVisible = (m_activeDisplayCount >= 2);
@@ -1168,7 +1169,7 @@ void MfdManager::update(const Vec3& headPos, const Vec3& headForward, float dtSe
         slot.gazeTracker.update(headPos, headForward, effectivePose, dtSeconds);
 
         // Update smooth alpha for auto-hide fade transition
-        if (slot.autoHideUntilGaze) {
+        if (slot.autoHideUntilGaze && !m_showAllWindows) {
             float targetAlpha = (slot.gazeTracker.isFocused() || slot.gazeTracker.dwellProgress() > 0.05f)
                                 ? 1.0f : 0.0f;
             slot.currentAlpha += (targetAlpha - slot.currentAlpha) * std::clamp(dtSeconds * 10.0f, 0.0f, 1.0f);

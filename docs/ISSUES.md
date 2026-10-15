@@ -1,18 +1,19 @@
 # EDVR MFD — Issue & Bug Tracker
 
 ## Status
-- **Active Open Issues**: 3 (1 High Priority, 2 Medium Priority)
-- **Resolved Issues**: 4
-- **Last Updated**: 2026-10-01
+- **Active Open Issues**: 2 (Medium Priority)
+- **Resolved Issues**: 7
+- **Last Updated**: 2026-10-14
 - **Jump to Section**:
   - [Open Issues](#open-issues)
-    - [MFD-001: Directional HAT switch repeat press input suppression bleeding through to ship power pips](#mfd-001--directional-hat-switch-repeat-press-input-suppression-bleeding-through-to-ship-power-pips)
     - [MFD-003: Cockpit MFD panels visible while in Galaxy Map](#mfd-003--cockpit-mfd-panels-visible-while-in-galaxy-map)
-    - [MFD-005: F8 Plugins menu toggles reset to default immediately upon navigation change](#mfd-005--f8-plugins-menu-toggles-reset-to-default-immediately-upon-navigation-change)
+    - [MFD-006: MFD panels remain visible while in main pause / system menu](#mfd-006--mfd-panels-remain-visible-while-in-main-pause--system-menu)
   - [Resolved Issues](#resolved)
-    - [MFD-001: Keyboard & HOTAS input suppression failing in latest build](#mfd-001--keyboard--hotas-input-suppression-failing-in-latest-build)
+    - [MFD-001: Directional HAT switch repeat press input suppression bleeding through to ship power pips](#mfd-001--directional-hat-switch-repeat-press-input-suppression-bleeding-through-to-ship-power-pips)
     - [MFD-002: Joystick/vJoy input not suppressed while MFD has focus](#mfd-002--joystickvjoy-input-not-suppressed-while-mfd-has-focus)
     - [MFD-004: UP navigation input (keyboard & HOTAS hat switch) not captured](#mfd-004--up-navigation-input-keyboard--hotas-hat-switch-not-captured)
+    - [MFD-005: F8 Plugins menu toggles reset to default immediately upon navigation change](#mfd-005--f8-plugins-menu-toggles-reset-to-default-immediately-upon-navigation-change)
+    - [MFD-007: Show all windows setting does not disable gaze fade feature across all MFD panels](#mfd-007--show-all-windows-setting-does-not-disable-gaze-fade-feature-across-all-mfd-panels)
     - [MFD-R001: DLL unload crash (0xc0000409 in is_stream_flushable_or_commitable)](#mfd-r001--dll-unload-crash-0xc0000409-in-is_stream_flushable_or_commitable)
     - [MFD-R002: Calling convention mismatch (__cdecl vs __stdcall) causing stack corruption](#mfd-r002--calling-convention-mismatch-__cdecl-vs-__stdcall-causing-stack-corruption)
 
@@ -22,26 +23,8 @@
 
 | ID | Priority | Title | Suspected Area | Status |
 |---|---|---|---|---|
-| **MFD-001** | High | Directional HAT switch repeat press input suppression bleeding through to ship power pips | `src/d3d11/input_gate.cpp` (in EDVR host) | Resolved |
 | **MFD-003** | Medium | Cockpit MFD panels visible while in Galaxy Map | `src/mfd_manager.cpp`, `include/mfd_telemetry.h` | Open |
-| **MFD-005** | Medium | F8 Plugins menu toggles reset to default immediately upon navigation change | `src/d3d11/menu.cpp`, `src/plugins/plugin_manager.cpp` (in EDVR host) | Resolved |
 | **MFD-006** | Medium | MFD panels remain visible while in main pause / system menu | `src/mfd_manager.cpp`, `include/mfd_telemetry.h` | Open |
-
-
----
-
-### MFD-001 | Directional HAT switch repeat press input suppression bleeding through to ship power pips
-
-- **ID**: MFD-001
-- **Priority**: High
-- **Title**: Directional HAT switch repeat press input suppression bleeding through to ship power pips
-- **Date Reported**: 2026-10-01
-- **Description**:
-  When performing consecutive presses of the same HOTAS directional HAT switch (e.g., `Up -> Up -> Up`), the first press is swallowed properly by the MFD, but subsequent presses of the identical direction leak through to Elite Dangerous and adjust ship power pips.
-- **Root Cause Hypothesis**:
-  In `input_gate.cpp`, `filterDeviceState` executes `memset(data, 0, cb)` when `cb < sizeof(DIJOYSTATE)`. On non-standard structures, `0` at offset `0x18`/`0x1C` corresponds to North/UP (`0.0` degrees). If Elite sets a custom DirectInput data format (`SetDataFormat`), zeroing the buffer sets the POV hat state to `0` (UP), causing Elite to perceive a forced UP direction state while focused.
-- **Suspected Area of Code**:
-  - `src/d3d11/input_gate.cpp` (`filterDeviceState` & `filterDeviceData` custom format handling and `SetDataFormat` offset interception).
 
 ---
 
@@ -65,22 +48,54 @@
 
 ---
 
+### MFD-006 | MFD panels remain visible while in main pause / system menu
+
+- **ID**: MFD-006
+- **Priority**: Medium
+- **Title**: MFD panels remain visible while in main pause / system menu
+- **Date Reported**: 2026-10-01
+- **Description**:
+  When hitting ESC to bring up the main pause menu, cockpit 3D MFD panels remain active and rendered behind the pause menu.
+- **Suspected Area of Code**:
+  - `src/mfd_manager.cpp` (vehicle activity gating and title/pause screen suppression).
+
+---
+
+## Resolved
+
+### MFD-001 | Directional HAT switch repeat press input suppression bleeding through to ship power pips
+
+- **ID**: MFD-001
+- **Fixed Date**: 2026-10-14
+- **Commits**: `fork/feat/third-party-plugins` (`edvr-unofficial-patch`), `edvr-mfd`
+- **Root Cause**:
+  DirectInput keyboard and joystick state hooks in the EDVR host checked private menu state but did not properly suppress repeat presses when custom DirectInput formats were used by Elite Dangerous. Additionally, zeroing joystick buffers placed POV hat angles at 0 (UP), resulting in unwanted UP pip distribution.
+- **Fix**:
+  Fixed DirectInput state/data filtering to preserve POV centered state (`0xFFFFFFFF` / `-1`) and ensure plugin input block flag `g_pluginBlock` suppresses repeat presses across keyboard and joystick devices.
+
+---
+
 ### MFD-005 | F8 Plugins menu toggles reset to default immediately upon navigation change
 
 - **ID**: MFD-005
-- **Priority**: Medium
-- **Title**: F8 Plugins menu toggles reset to default immediately upon navigation change
-- **Date Reported**: 2026-09-29
-- **Description**:
-  In the F8 menu Plugins tab, toggling settings options (such as "Show All" or "Show MFDs") causes the toggle state to immediately revert/flip back to its default value as soon as navigation moves away from the option.
-- **Reproduction Steps**:
-  1. Open the F8 EDVR menu and navigate to the Plugins tab.
-  2. Toggle either the "Show All" or "Show MFDs" setting toggle.
-  3. Move the menu focus cursor away from the toggle option.
-  4. Observe that the toggle flips back to its original default state immediately upon leaving the option.
-- **Suspected Area of Code**:
-  - Host menu rendering/event handler (`src/menu/plugins_page.cpp` or plugin settings callback in `edvr-unofficial-patch`).
-  - Plugin settings state getter/setter callback or value backing variable synchronization in `src/mfd_plugin.cpp`.
+- **Fixed Date**: 2026-10-14
+- **Commits**: `fork/feat/third-party-plugins` (`edvr-unofficial-patch`), `edvr-mfd`
+- **Root Cause**:
+  In the EDVR host graphics interface module and extension manager (`src/d3d11/menu.cpp`), plugin setting entries in the F8 menu re-queried the plugin getter on every cursor move and overwrote pending/persisted state, or lacked bidirectional synchronization with the live plugin backing fields.
+- **Fix**:
+  Synchronized plugin settings state management in `src/d3d11/menu.cpp` and `src/plugins/plugin_manager.cpp` so toggles persist their active state during navigation and reflect live plugin values.
+
+---
+
+### MFD-007 | Show all windows setting does not disable gaze fade feature across all MFD panels
+
+- **ID**: MFD-007
+- **Fixed Date**: 2026-10-14
+- **Commits**: `edvr-mfd`
+- **Root Cause**:
+  In `MfdManager::updateGaze()`, `slot.currentAlpha` was computed based solely on `slot.autoHideUntilGaze` and head-gaze focus status, ignoring the `m_showAllWindows` setting. Even with "Show all windows" enabled, panels would fade out to 0 opacity when looking away.
+- **Fix**:
+  Updated `MfdManager::updateGaze()` to check `if (slot.autoHideUntilGaze && !m_showAllWindows)`. When `m_showAllWindows` is true, gaze fade is completely bypassed and all windows are maintained at full opacity (`slot.currentAlpha = 1.0f`). Added `slot.currentAlpha = 1.0f` to `setShowAllWindows(true)` and added regression tests in `mfd_test.cpp`.
 
 ---
 
