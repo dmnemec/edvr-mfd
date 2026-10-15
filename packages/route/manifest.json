@@ -1,0 +1,26 @@
+{
+  "$schema": "https://dmnemec.github.io/edvr-mfd/schema/manifest.v1.schema.json",
+  "manifestVersion": 1,
+  "id": "route",
+  "name": "Route & Neutron Router",
+  "version": "1.0.0",
+  "description": "Displays in-game plotted routes and Spansh neutron highway waypoints",
+  "screens": [
+    {
+      "id": "route",
+      "file": "screens/route.json",
+      "title": "ROUTE",
+      "contexts": [
+        "ship_cockpit",
+        "docked"
+      ]
+    }
+  ],
+  "companions": [
+    {
+      "id": "route-feed",
+      "exe": "bin/edvr-mfd-route.exe",
+      "restart": "on-failure"
+    }
+  ]
+}

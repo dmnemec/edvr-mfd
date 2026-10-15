@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "title": "POWER",
+  "subtitle": "DISTRIBUTION & DRAW",
+  "statusBadge": {
+    "text": "WAITING FOR DATA",
+    "color": "dim"
+  },
+  "footerHint": "Awaiting power telemetry...",
+  "tabs": [
+    {
+      "id": "pips",
+      "title": "PIPS & POWER",
+      "type": "bars",
+      "items": [
+        {
+          "id": "sys",
+          "label": "SYS",
+          "value": 0,
+          "max": 8,
+          "segments": 8,
+          "color": "dim"
+        },
+        {
+          "id": "eng",
+          "label": "ENG",
+          "value": 0,
+          "max": 8,
+          "segments": 8,
+          "color": "dim"
+        },
+        {
+          "id": "wep",
+          "label": "WEP",
+          "value": 0,
+          "max": 8,
+          "segments": 8,
+          "color": "dim"
+        }
+      ]
+    },
+    {
+      "id": "status",
+      "title": "STATUS",
+      "type": "keyvalue",
+      "items": [
+        {
+          "id": "power_status",
+          "key": "Status",
+          "value": "Awaiting telemetry...",
+          "valueColor": "dim"
+        }
+      ]
+    },
+    {
+      "id": "priorities",
+      "title": "PRIORITIES",
+      "type": "list",
+      "items": [
+        {
+          "id": "placeholder",
+          "label": "No module info",
+          "value": "—",
+          "valueColor": "dim"
+        }
+      ]
+    }
+  ]
+}

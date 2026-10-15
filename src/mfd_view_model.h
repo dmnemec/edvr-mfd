@@ -7,6 +7,60 @@
 
 namespace edvr::mfd {
 
+// Check state for list item checks
+enum class MfdCheckState : uint8_t {
+    kDone,
+    kTodo,
+    kNa
+};
+
+struct MfdCheckItem {
+    std::string label;        // 1-2 chars
+    MfdCheckState state = MfdCheckState::kTodo;
+};
+
+// Fixed glyph set for icons (§5.3)
+enum class MfdIcon : uint8_t {
+    kNone = 0,
+    kFuel,
+    kWarning,
+    kNeutron,
+    kWhitedwarf,
+    kBio,
+    kGeo,
+    kCheck,
+    kLock,
+    kStar
+};
+
+// Item action trigger type
+enum class MfdItemAction : uint8_t {
+    kEvent = 0,
+    kClipboard = 1
+};
+
+// Named palette colors (§5.3)
+enum class MfdNamedColor : uint8_t {
+    kNormal = 0,
+    kDim,
+    kAccent,
+    kOk,
+    kWarn,
+    kCrit
+};
+
+// Bar gauge item within a bars tab
+struct MfdBarItem {
+    std::string id;           // Unique within tab
+    std::string label;
+    float value = 0.0f;
+    float max = 1.0f;
+    int segments = 0;
+    std::string colorName = "normal";
+    MfdNamedColor namedColor = MfdNamedColor::kNormal;
+    MfdColor resolvedColor = palette::kAmberNormal;
+};
+
 // Individual item within a list tab.
 struct MfdListItem {
     std::string id;
@@ -16,6 +70,20 @@ struct MfdListItem {
     std::string badge;        // Status tag (e.g. "[REFUEL]", "[NEXT]", "[HOT]")
     MfdColor badgeColor = palette::kCyanAccent;
     bool isSelectable = true;
+
+    // Schema v1 fields:
+    std::string valueColorName = "normal";
+    MfdNamedColor valueNamedColor = MfdNamedColor::kNormal;
+    MfdColor valueColor = palette::kAmberNormal;
+    std::string iconName;
+    MfdIcon icon = MfdIcon::kNone;
+    std::vector<MfdCheckItem> checks;
+    MfdItemAction action = MfdItemAction::kEvent;
+
+    MfdListItem() = default;
+    MfdListItem(std::string id_, std::string label_, std::string value_ = "", std::string sublabel_ = "", std::string badge_ = "")
+        : id(std::move(id_)), label(std::move(label_)), value(std::move(value_)),
+          sublabel(std::move(sublabel_)), badge(std::move(badge_)) {}
 };
 
 // Key-value entry in a status/summary grid.
@@ -23,17 +91,31 @@ struct MfdKeyValue {
     std::string key;
     std::string value;
     MfdColor valueColor = palette::kAmberNormal;
+
+    // Schema v1 fields:
+    std::string id;
+    std::string valueColorName = "normal";
+    MfdNamedColor valueNamedColor = MfdNamedColor::kNormal;
+    MfdItemAction action = MfdItemAction::kEvent;
+
+    MfdKeyValue() = default;
+    MfdKeyValue(std::string k, std::string v, MfdColor vc = palette::kAmberNormal)
+        : key(std::move(k)), value(std::move(v)), valueColor(vc), id(key) {}
+    MfdKeyValue(std::string id_, std::string k, std::string v, MfdColor vc = palette::kAmberNormal)
+        : key(std::move(k)), value(std::move(v)), valueColor(vc), id(std::move(id_)) {}
 };
 
 // Tab type definition.
 enum class MfdTabType : uint8_t {
     kList = 0,       // Scrollable list of actionable items
     kKeyValue = 1,   // Status grid of metrics / stats
-    kText = 2        // Scrollable text log / briefing
+    kText = 2,       // Scrollable text log / briefing
+    kBars = 3        // Bar indicators / progress gauges
 };
 
 // Definition of a single MFD tab.
 struct MfdTab {
+    std::string id;
     std::string title;
     MfdTabType type = MfdTabType::kList;
 
@@ -48,14 +130,22 @@ struct MfdTab {
     // For kText tabs:
     std::vector<std::string> lines;
     int textScrollLine = 0;
+
+    // For kBars tabs:
+    std::vector<MfdBarItem> barItems;
 };
 
 // Complete structured view model representing one MFD screen.
 struct MfdViewModel {
+    // Schema version:
+    int schemaVersion = 1;
+
     // Header section:
     std::string title = "ELITE AVIONICS";
     std::string subtitle;
     std::string statusBadge = "ONLINE";
+    std::string statusBadgeColorName = "ok";
+    MfdNamedColor statusBadgeNamedColor = MfdNamedColor::kOk;
     MfdColor statusBadgeColor = palette::kSuccessGreen;
 
     // Tabs navigation:
@@ -126,6 +216,20 @@ struct MfdViewModel {
                 tab->scrollOffset = tab->selectedIndex;
             } else if (tab->selectedIndex >= tab->scrollOffset + kvVisibleRows) {
                 tab->scrollOffset = tab->selectedIndex - kvVisibleRows + 1;
+            }
+        } else if (tab->type == MfdTabType::kBars && !tab->barItems.empty()) {
+            int newIdx = tab->selectedIndex + delta;
+            if (newIdx < 0) newIdx = 0;
+            if (newIdx >= static_cast<int>(tab->barItems.size())) {
+                newIdx = static_cast<int>(tab->barItems.size()) - 1;
+            }
+            tab->selectedIndex = newIdx;
+
+            int barsVisibleRows = 8;
+            if (tab->selectedIndex < tab->scrollOffset) {
+                tab->scrollOffset = tab->selectedIndex;
+            } else if (tab->selectedIndex >= tab->scrollOffset + barsVisibleRows) {
+                tab->scrollOffset = tab->selectedIndex - barsVisibleRows + 1;
             }
         } else if (tab->type == MfdTabType::kText && !tab->lines.empty()) {
             int newScroll = tab->textScrollLine + delta;

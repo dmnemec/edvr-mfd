@@ -1,0 +1,45 @@
+{
+  "$schema": "https://dmnemec.github.io/edvr-mfd/schema/manifest.v1.schema.json",
+  "manifestVersion": 1,
+  "id": "exploration",
+  "name": "System & Exobiology Survey",
+  "version": "1.0.0",
+  "author": "EDVR MFD",
+  "description": "System cartography and exobiology survey readouts",
+  "minPluginVersion": "1.0.0",
+  "screens": [
+    {
+      "id": "system",
+      "file": "screens/system.json",
+      "title": "SYSTEM",
+      "contexts": [
+        "ship_cockpit",
+        "fighter",
+        "srv",
+        "on_foot",
+        "taxi",
+        "multicrew"
+      ]
+    },
+    {
+      "id": "bio",
+      "file": "screens/bio.json",
+      "title": "BIO",
+      "contexts": [
+        "ship_cockpit",
+        "fighter",
+        "srv",
+        "on_foot",
+        "taxi",
+        "multicrew"
+      ]
+    }
+  ],
+  "companions": [
+    {
+      "id": "exploration-feed",
+      "exe": "bin/edvr-mfd-exploration.exe",
+      "restart": "on-failure"
+    }
+  ]
+}

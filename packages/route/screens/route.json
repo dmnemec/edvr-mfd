@@ -1,0 +1,25 @@
+{
+  "$schema": "https://dmnemec.github.io/edvr-mfd/schema/display.v1.schema.json",
+  "schemaVersion": 1,
+  "title": "ROUTE",
+  "subtitle": "STANDBY",
+  "statusBadge": {
+    "text": "WAITING FOR ROUTE",
+    "color": "dim"
+  },
+  "footerHint": "PLOT A ROUTE IN GALAXY MAP OR LOAD SPANSH CSV",
+  "tabs": [
+    {
+      "id": "navroute",
+      "title": "NAVROUTE",
+      "type": "text",
+      "text": "No route plotted.\nPlot route in Galaxy Map\nto view waypoints."
+    },
+    {
+      "id": "spansh",
+      "title": "SPANSH",
+      "type": "text",
+      "text": "SPANSH ROUTER\nExport CSV at spansh.co.uk\nSave as packages/route/route.csv\nWaypoints tracked on arrival."
+    }
+  ]
+}

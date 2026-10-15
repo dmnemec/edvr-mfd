@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "title": "BIO",
+  "subtitle": "EXOBIOLOGY",
+  "statusBadge": {
+    "text": "WAITING FOR SCAN",
+    "color": "dim"
+  },
+  "footerHint": "Awaiting exobiology survey telemetry...",
+  "tabs": [
+    {
+      "id": "bodies",
+      "title": "BODIES",
+      "type": "list",
+      "items": [
+        {
+          "id": "placeholder_bodies",
+          "label": "No bio signals detected",
+          "sublabel": "Probe landable planets with DSS",
+          "value": "—",
+          "valueColor": "dim"
+        }
+      ]
+    },
+    {
+      "id": "current",
+      "title": "CURRENT",
+      "type": "list",
+      "items": [
+        {
+          "id": "placeholder_current",
+          "label": "No active biological survey",
+          "sublabel": "Approach or land on body with bio signals",
+          "value": "—",
+          "valueColor": "dim"
+        }
+      ]
+    },
+    {
+      "id": "sample",
+      "title": "SAMPLE",
+      "type": "keyvalue",
+      "items": [
+        {
+          "id": "sample_dist",
+          "key": "Sample Distance",
+          "value": "—",
+          "valueColor": "dim"
+        },
+        {
+          "id": "sample_status",
+          "key": "Status",
+          "value": "Awaiting sample in progress",
+          "valueColor": "dim"
+        }
+      ]
+    }
+  ]
+}

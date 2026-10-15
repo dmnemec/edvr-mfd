@@ -1,18 +1,18 @@
 # EDVR MFD — Issue & Bug Tracker
 
 ## Status
-- **Active Open Issues**: 2 (Medium Priority)
-- **Resolved Issues**: 7
-- **Last Updated**: 2026-10-14
+- **Active Open Issues**: 0
+- **Resolved Issues**: 9
+- **Last Updated**: 2026-10-15
 - **Jump to Section**:
   - [Open Issues](#open-issues)
-    - [MFD-003: Cockpit MFD panels visible while in Galaxy Map](#mfd-003--cockpit-mfd-panels-visible-while-in-galaxy-map)
-    - [MFD-006: MFD panels remain visible while in main pause / system menu](#mfd-006--mfd-panels-remain-visible-while-in-main-pause--system-menu)
   - [Resolved Issues](#resolved)
     - [MFD-001: Directional HAT switch repeat press input suppression bleeding through to ship power pips](#mfd-001--directional-hat-switch-repeat-press-input-suppression-bleeding-through-to-ship-power-pips)
     - [MFD-002: Joystick/vJoy input not suppressed while MFD has focus](#mfd-002--joystickvjoy-input-not-suppressed-while-mfd-has-focus)
+    - [MFD-003: Cockpit MFD panels visible while in Galaxy Map](#mfd-003--cockpit-mfd-panels-visible-while-in-galaxy-map)
     - [MFD-004: UP navigation input (keyboard & HOTAS hat switch) not captured](#mfd-004--up-navigation-input-keyboard--hotas-hat-switch-not-captured)
     - [MFD-005: F8 Plugins menu toggles reset to default immediately upon navigation change](#mfd-005--f8-plugins-menu-toggles-reset-to-default-immediately-upon-navigation-change)
+    - [MFD-006: MFD panels remain visible while in main pause / system menu](#mfd-006--mfd-panels-remain-visible-while-in-main-pause--system-menu)
     - [MFD-007: Show all windows setting does not disable gaze fade feature across all MFD panels](#mfd-007--show-all-windows-setting-does-not-disable-gaze-fade-feature-across-all-mfd-panels)
     - [MFD-R001: DLL unload crash (0xc0000409 in is_stream_flushable_or_commitable)](#mfd-r001--dll-unload-crash-0xc0000409-in-is_stream_flushable_or_commitable)
     - [MFD-R002: Calling convention mismatch (__cdecl vs __stdcall) causing stack corruption](#mfd-r002--calling-convention-mismatch-__cdecl-vs-__stdcall-causing-stack-corruption)
@@ -21,42 +21,35 @@
 
 ## Open Issues
 
-| ID | Priority | Title | Suspected Area | Status |
-|---|---|---|---|---|
-| **MFD-003** | Medium | Cockpit MFD panels visible while in Galaxy Map | `src/mfd_context.cpp`, `src/mfd_manager.cpp` | In Progress (Resolving via ContextEvaluator §7) |
-| **MFD-006** | Medium | MFD panels remain visible while in main pause / system menu | `src/mfd_plugin.cpp`, `src/mfd_manager.cpp` | In Progress (Resolving via "Hide All" toggle §7.4, D1) |
+*None at this time.*
 
 ---
+
+## Resolved
 
 ### MFD-003 | Cockpit MFD panels visible while in Galaxy Map
 
 - **ID**: MFD-003
-- **Priority**: Medium
-- **Title**: Cockpit MFD panels visible while in Galaxy Map
-- **Date Reported**: 2026-09-28
-- **Status**: In Progress
-- **Description**:
-  MFD panels rendered in cockpit 3D space remain visible when the player opens the Galaxy Map (or System Map). The Galaxy Map is a separate game state where cockpit-bound MFDs should not render.
-- **Resolution Plan**:
-  Addressed by `ContextEvaluator` (design doc §7) reading `GuiFocus` from `Status.json`. Galaxy Map (GuiFocus=6), System Map (7), Orrery (8), FSS (9), SAA (10), Codex (11) are added to the global exclusion list, automatically hiding MFDs.
+- **Fixed Date**: 2026-10-15
+- **Commits**: `edvr-mfd`
+- **Root Cause**:
+  Cockpit 3D MFD panels were rendered regardless of active game modal state (Galaxy Map, System Map, Orrery, FSS, SAA, Codex).
+- **Fix**:
+  Addressed by `ContextEvaluator` reading `GuiFocus` from `Status.json`. MFD rendering is suppressed whenever GuiFocus indicates Galaxy Map (GuiFocus=6), System Map (7), Orrery (8), FSS (9), SAA (10), or Codex (11).
 
 ---
 
 ### MFD-006 | MFD panels remain visible while in main pause / system menu
 
 - **ID**: MFD-006
-- **Priority**: Medium
-- **Title**: MFD panels remain visible while in main pause / system menu
-- **Date Reported**: 2026-10-01
-- **Status**: In Progress
-- **Description**:
-  When hitting ESC to bring up the main pause menu, cockpit 3D MFD panels remain active and rendered behind/over the pause menu.
-- **Resolution Plan**:
-  Per user decision, avoid fragile reverse engineering of game pause internals. Resolved by introducing an explicit **"Hide All"** toggle (`mfd_hide_all_toggle`) under Cockpit MFD in F8 settings (and optional ini hotkey), allowing the pilot to immediately clear all MFDs on demand.
+- **Fixed Date**: 2026-10-15
+- **Commits**: `edvr-mfd`
+- **Root Cause**:
+  The main pause / system menu (ESC) in Elite Dangerous does not emit a distinct bit in `Status.json` Flags without brittle memory hooks.
+- **Fix**:
+  Resolved by introducing an explicit **"Hide All"** toggle (`mfd_hide_all_toggle`) under Cockpit MFD in F8 settings (and optional ini hotkey fallback), allowing the pilot to immediately clear all MFDs on demand.
 
 ---
-
-## Resolved
 
 ### MFD-001 | Directional HAT switch repeat press input suppression bleeding through to ship power pips
 
@@ -94,25 +87,11 @@
 
 ---
 
-## Resolved
-
-### MFD-001 | Keyboard & HOTAS input suppression failing in latest build
-
-- **ID**: MFD-001
-- **Fixed Date**: 2026-10-01
-- **Commits**: `ececeb3` (host: `edvr-unofficial-patch`), `8ffb330` (`edvr-mfd`)
-- **Root Cause**:
-  DirectInput keyboard vtable hooks (`filterDeviceState` and `filterDeviceData`) in the EDVR host checked `g_private` (F8 menu open) but ignored `g_pluginBlock` (plugin keyboard focus). When MFD plugin set `swallowInput = 1`, `g_pluginBlock` became true, but DirectInput keyboard calls bypassed the gate and passed raw keys to Elite.
-- **Fix**:
-  Updated `filterDeviceState` and `filterDeviceData` in host `src/d3d11/input_gate.cpp` to check `g_pluginBlock.load()` alongside `g_private.load()`. Added unit tests in `mfd_test.cpp` verifying input filter suppression logic.
-
----
-
 ### MFD-002 | Joystick/vJoy input not suppressed while MFD has focus
 
 - **ID**: MFD-002
 - **Fixed Date**: 2026-10-01
-- **Commits**: `ececeb3` (host: `edvr-unofficial-patch`), `8ffb330` (`edvr-mfd`)
+- **Commits**: `fork/feat/third-party-plugins` (`edvr-unofficial-patch`), `edvr-mfd`
 - **Root Cause**:
   `DeclarativeMfdProvider::onInput` auto-focused MFDs when unfocused, while MFD manager router required explicit slot focus before suppressing inputs.
 - **Fix**:
@@ -124,7 +103,7 @@
 
 - **ID**: MFD-004
 - **Fixed Date**: 2026-10-01
-- **Commit**: `8ffb330` (`edvr-mfd`)
+- **Commit**: `edvr-mfd`
 - **Root Cause**:
   1. Elite's `.binds` XML maps UP key to `"Key_Up"` or `"Key_UpArrow"`. `parseEliteKey` only handled `"Key_UpArrow"`, rejecting `"Key_Up"` (or mapping it to `'U'`).
   2. DirectInput POV hat angle for UP was checked with `dwPOV <= 35900`, missing the exact 36000 (360.0°) boundary angle returned by DirectInput for 0°/360° UP.
@@ -137,7 +116,7 @@
 
 - **ID**: MFD-R001
 - **Fixed Date**: 2026-09-28
-- **Commit**: `aa2226d`
+- **Commit**: `edvr-mfd`
 - **Root Cause**:
   The `Log` class used CRT stdio (`FILE*`). When linked with `/MT`, CRT's `_flushall` atexit handler conflicted with `~Log()`'s `fclose()` invocation during DLL teardown, causing a fast-fail crash (0xc0000409).
 - **Fix**:
@@ -153,4 +132,3 @@
   Plugin callback function pointers were declared without `EDVR_API` (`__stdcall`), causing stack pointer corruption on call across the DLL boundary.
 - **Fix**:
   Added `EDVR_API` macro to all function pointers in `include/edvr_plugin_api.h`; replaced lambdas (which cannot be `__stdcall`) with named static functions in both host and plugin.
-

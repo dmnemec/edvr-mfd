@@ -48,6 +48,10 @@ class DeclarativeMfdProvider : public IMfdProvider {
 public:
     using ActionCallback = std::function<void(const std::string& itemId, const std::string& itemLabel)>;
     using KeyValueActionCallback = std::function<void(const std::string& tabTitle, int index, const std::string& key, int adjustDelta)>;
+    using TabChangeCallback = std::function<void(const std::string& tabId, int tabIndex)>;
+    using NavCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel)>;
+    using SelectCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value)>;
+    using AdjustCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& key, int delta)>;
 
     explicit DeclarativeMfdProvider(std::string id, std::string defaultTitle = "NAV MFD")
         : m_id(std::move(id)) {
@@ -76,6 +80,22 @@ public:
         m_kvActionCallback = std::move(callback);
     }
 
+    void setTabChangeCallback(TabChangeCallback cb) {
+        m_tabChangeCallback = std::move(cb);
+    }
+
+    void setNavCallback(NavCallback cb) {
+        m_navCallback = std::move(cb);
+    }
+
+    void setSelectCallback(SelectCallback cb) {
+        m_selectCallback = std::move(cb);
+    }
+
+    void setAdjustCallback(AdjustCallback cb) {
+        m_adjustCallback = std::move(cb);
+    }
+
     void setUpdateHook(UpdateHook hook) {
         m_updateHook = std::move(hook);
     }
@@ -93,31 +113,63 @@ public:
     bool onInput(MfdInputAction action) override {
         if (!m_model.isFocused) return false;
 
-        if (hasAction(action, MfdInputAction::kNextTab)) {
-            m_model.cycleNextTab();
+        if (hasAction(action, MfdInputAction::kNextTab) || hasAction(action, MfdInputAction::kPrevTab)) {
+            int oldTabIdx = m_model.activeTabIndex;
+            if (hasAction(action, MfdInputAction::kNextTab)) {
+                m_model.cycleNextTab();
+            } else {
+                m_model.cyclePrevTab();
+            }
+            if (m_model.activeTabIndex != oldTabIdx && m_tabChangeCallback) {
+                auto* curTab = m_model.currentTab();
+                if (curTab) {
+                    try {
+                        m_tabChangeCallback(curTab->id.empty() ? curTab->title : curTab->id, m_model.activeTabIndex);
+                    } catch (...) {}
+                }
+            }
             return true;
         }
-        if (hasAction(action, MfdInputAction::kPrevTab)) {
-            m_model.cyclePrevTab();
-            return true;
-        }
-        if (hasAction(action, MfdInputAction::kUp)) {
-            m_model.moveSelection(-1);
-            return true;
-        }
-        if (hasAction(action, MfdInputAction::kDown)) {
-            m_model.moveSelection(1);
+        if (hasAction(action, MfdInputAction::kUp) || hasAction(action, MfdInputAction::kDown)) {
+            auto* tab = m_model.currentTab();
+            int oldIdx = tab ? tab->selectedIndex : -1;
+            int delta = hasAction(action, MfdInputAction::kUp) ? -1 : 1;
+            m_model.moveSelection(delta);
+            if (tab && tab->selectedIndex != oldIdx && m_navCallback) {
+                std::string tabId = tab->id.empty() ? tab->title : tab->id;
+                if (tab->type == MfdTabType::kList && tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->items.size())) {
+                    const auto& it = tab->items[tab->selectedIndex];
+                    try { m_navCallback(tabId, tab->selectedIndex, it.id, it.label); } catch (...) {}
+                } else if (tab->type == MfdTabType::kKeyValue && tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->keyValues.size())) {
+                    const auto& kv = tab->keyValues[tab->selectedIndex];
+                    try { m_navCallback(tabId, tab->selectedIndex, kv.id, kv.key); } catch (...) {}
+                } else if (tab->type == MfdTabType::kBars && tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->barItems.size())) {
+                    const auto& bar = tab->barItems[tab->selectedIndex];
+                    try { m_navCallback(tabId, tab->selectedIndex, bar.id, bar.label); } catch (...) {}
+                }
+            }
             return true;
         }
         if (hasAction(action, MfdInputAction::kLeft) || hasAction(action, MfdInputAction::kRight)) {
             auto* tab = m_model.currentTab();
-            if (tab && tab->type == MfdTabType::kKeyValue && !tab->keyValues.empty()) {
-                if (tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->keyValues.size())) {
-                    int delta = hasAction(action, MfdInputAction::kRight) ? 1 : -1;
+            if (tab && (tab->type == MfdTabType::kKeyValue || tab->type == MfdTabType::kBars)) {
+                int delta = hasAction(action, MfdInputAction::kRight) ? 1 : -1;
+                std::string tabId = tab->id.empty() ? tab->title : tab->id;
+                if (tab->type == MfdTabType::kKeyValue && !tab->keyValues.empty() &&
+                    tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->keyValues.size())) {
+                    const auto& kv = tab->keyValues[tab->selectedIndex];
+                    if (m_adjustCallback) {
+                        try { m_adjustCallback(tabId, tab->selectedIndex, kv.id, kv.key, kv.key, delta); } catch (...) {}
+                    }
                     if (m_kvActionCallback) {
-                        try {
-                            m_kvActionCallback(tab->title, tab->selectedIndex, tab->keyValues[tab->selectedIndex].key, delta);
-                        } catch (...) {}
+                        try { m_kvActionCallback(tab->title, tab->selectedIndex, kv.key, delta); } catch (...) {}
+                    }
+                    return true;
+                } else if (tab->type == MfdTabType::kBars && !tab->barItems.empty() &&
+                           tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->barItems.size())) {
+                    const auto& bar = tab->barItems[tab->selectedIndex];
+                    if (m_adjustCallback) {
+                        try { m_adjustCallback(tabId, tab->selectedIndex, bar.id, bar.label, bar.label, delta); } catch (...) {}
                     }
                     return true;
                 }
@@ -126,22 +178,35 @@ public:
         if (hasAction(action, MfdInputAction::kSelect)) {
             auto* tab = m_model.currentTab();
             if (tab) {
+                std::string tabId = tab->id.empty() ? tab->title : tab->id;
                 if (tab->type == MfdTabType::kList && !tab->items.empty()) {
                     if (tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->items.size())) {
                         const auto& item = tab->items[tab->selectedIndex];
+                        std::string actionStr = (item.action == MfdItemAction::kClipboard) ? "clipboard" : "event";
+                        if (m_selectCallback) {
+                            try { m_selectCallback(tabId, tab->selectedIndex, item.id, item.label, actionStr, item.value); } catch (...) {}
+                        }
                         if (m_actionCallback) {
-                            try {
-                                m_actionCallback(item.id, item.label);
-                            } catch (...) {}
+                            try { m_actionCallback(item.id, item.label); } catch (...) {}
                         }
                         return true;
                     }
                 } else if (tab->type == MfdTabType::kKeyValue && !tab->keyValues.empty()) {
                     if (tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->keyValues.size())) {
+                        const auto& kv = tab->keyValues[tab->selectedIndex];
+                        if (m_selectCallback) {
+                            try { m_selectCallback(tabId, tab->selectedIndex, kv.id, kv.key, "event", kv.value); } catch (...) {}
+                        }
                         if (m_kvActionCallback) {
-                            try {
-                                m_kvActionCallback(tab->title, tab->selectedIndex, tab->keyValues[tab->selectedIndex].key, 1);
-                            } catch (...) {}
+                            try { m_kvActionCallback(tab->title, tab->selectedIndex, kv.key, 1); } catch (...) {}
+                        }
+                        return true;
+                    }
+                } else if (tab->type == MfdTabType::kBars && !tab->barItems.empty()) {
+                    if (tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->barItems.size())) {
+                        const auto& bar = tab->barItems[tab->selectedIndex];
+                        if (m_selectCallback) {
+                            try { m_selectCallback(tabId, tab->selectedIndex, bar.id, bar.label, "event", ""); } catch (...) {}
                         }
                         return true;
                     }
@@ -169,6 +234,10 @@ private:
     MfdViewModel m_model;
     ActionCallback m_actionCallback;
     KeyValueActionCallback m_kvActionCallback;
+    TabChangeCallback m_tabChangeCallback;
+    NavCallback m_navCallback;
+    SelectCallback m_selectCallback;
+    AdjustCallback m_adjustCallback;
     UpdateHook m_updateHook;
 };
 

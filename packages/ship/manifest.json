@@ -1,0 +1,65 @@
+{
+  "manifestVersion": 1,
+  "id": "ship",
+  "name": "Ship Readout",
+  "version": "1.0.0",
+  "author": "EDVR MFD",
+  "description": "Module integrity, power and cargo.",
+  "minPluginVersion": "1.0.0",
+  "screens": [
+    {
+      "id": "modules",
+      "file": "screens/modules.json",
+      "title": "MODULES",
+      "pose": {
+        "position": [-0.45, -0.22, -0.48],
+        "pitchDeg": -22.0,
+        "yawDeg": 32.0,
+        "widthM": 0.24,
+        "heightM": 0.16
+      },
+      "contexts": ["ship_cockpit", "fighter"],
+      "excludeContexts": [],
+      "autoHideUntilGaze": false
+    },
+    {
+      "id": "power",
+      "file": "screens/power.json",
+      "title": "POWER",
+      "pose": {
+        "position": [0.45, -0.22, -0.48],
+        "pitchDeg": -22.0,
+        "yawDeg": -32.0,
+        "widthM": 0.24,
+        "heightM": 0.16
+      },
+      "contexts": ["ship_cockpit", "fighter"],
+      "excludeContexts": [],
+      "autoHideUntilGaze": false
+    },
+    {
+      "id": "cargo",
+      "file": "screens/cargo.json",
+      "title": "CARGO",
+      "pose": {
+        "position": [0.0, -0.28, -0.45],
+        "pitchDeg": -35.0,
+        "yawDeg": 0.0,
+        "widthM": 0.24,
+        "heightM": 0.16
+      },
+      "contexts": ["ship_cockpit", "fighter", "docked"],
+      "excludeContexts": [],
+      "autoHideUntilGaze": false
+    }
+  ],
+  "companions": [
+    {
+      "id": "ship-feed",
+      "exe": "bin/edvr-mfd-ship.exe",
+      "args": [],
+      "env": {},
+      "restart": "on-failure"
+    }
+  ]
+}

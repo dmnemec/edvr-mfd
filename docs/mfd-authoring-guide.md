@@ -1,28 +1,59 @@
-# Cockpit MFD Plugin & Display Authoring Guide
+# Cockpit MFD Package & Display Authoring Guide (v1.0)
 
 ## Status
-- **Target Audience**: Third-party tool developers, modders, and pilots creating custom in-cockpit MFD displays for Elite Dangerous VR.
+- **Target Audience**: Third-party tool developers, companion authors, and pilots creating custom in-cockpit MFD packages for Elite Dangerous VR.
 - **Engine**: EDVR Cockpit MFD Addon (`plugins/edvr_mfd/plugin.dll`).
-- **Data Model**: Declarative JSON Display Schema (`displays/*.json`), hot-reloaded at runtime with bidirectional interaction logging (`events.jsonl`).
+- **Data Model**: Package Platform Layout (`plugins/edvr_mfd/mfds/<pkg_id>/`), Manifest Schema v1 (`manifest.v1.schema.json`), and Declarative Display Schema v1 (`display.v1.schema.json`).
 
 ---
 
-## 1. Quick Start: Your First Custom MFD in 60 Seconds
+## 1. Quick Start: Your First Custom MFD Package in 60 Seconds
 
-You do not need to compile C++ code or build DLLs to create rich, interactive in-cockpit VR displays. You simply write a JSON file.
+Creating a custom MFD requires no C++ compilation. An MFD is structured as an isolated package folder containing a `manifest.json` and one or more screen `.json` definitions.
 
-1. Navigate to your Elite Dangerous Odyssey installation directory:
-   ```text
-   <Elite Dangerous Odyssey Game Folder>\plugins\edvr_mfd\displays\
-   ```
-2. Create a new file called `my_tracker.json`.
-3. Paste the following JSON content and save:
+### Step 1: Create Package Directory
+Navigate to your Elite Dangerous installation:
+```text
+<Elite Dangerous Odyssey Game Folder>\plugins\edvr_mfd\mfds\my_tracker\
+```
+Create a `screens\` subdirectory:
+```text
+<Elite Dangerous Odyssey Game Folder>\plugins\edvr_mfd\mfds\my_tracker\screens\
+```
 
+### Step 2: Create `manifest.json`
+Inside `mfds\my_tracker\manifest.json`, save:
 ```json
 {
+  "$schema": "https://raw.githubusercontent.com/dmnemec/edvr-mfd/main/docs/schema/manifest.v1.schema.json",
+  "manifestVersion": 1,
+  "id": "my_tracker",
+  "name": "Mission & Bounty Tracker",
+  "version": "1.0.0",
+  "author": "Commander",
+  "description": "Active bounty targets and operations summary.",
+  "minPluginVersion": "1.0.0",
+  "screens": [
+    {
+      "id": "bounties",
+      "file": "screens/bounties.json",
+      "title": "BOUNTIES",
+      "contexts": ["ship_cockpit", "fighter"],
+      "excludeContexts": []
+    }
+  ]
+}
+```
+
+### Step 3: Create Screen Definition
+Inside `mfds\my_tracker\screens\bounties.json`, save:
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/dmnemec/edvr-mfd/main/docs/schema/display.v1.schema.json",
   "title": "MISSION TRACKER",
   "subtitle": "ACTIVE OPERATIONS",
   "statusBadge": "ONLINE",
+  "statusBadgeColor": "green",
   "footerHint": "[Q/E] TABS   [UP/DN] SELECT   [SPACE] COPY",
   "tabs": [
     {
@@ -34,14 +65,16 @@ You do not need to compile C++ code or build DLLs to create rich, interactive in
           "label": "Pirate Lord Vane",
           "value": "2,450,000 CR",
           "sublabel": "System: HR 1257 (High RES)",
-          "badge": "URGENT"
+          "badge": "URGENT",
+          "badgeColor": "red"
         },
         {
           "id": "target_2",
           "label": "Crimson Gang Enforcer",
           "value": "850,000 CR",
           "sublabel": "System: Sol (Nav Beacon)",
-          "badge": "ACTIVE"
+          "badge": "ACTIVE",
+          "badgeColor": "amber"
         }
       ]
     },
@@ -58,298 +91,213 @@ You do not need to compile C++ code or build DLLs to create rich, interactive in
 }
 ```
 
-4. Put on your VR headset in Elite Dangerous. The MFD will immediately render in your cockpit. Look at it to focus, use **Q/E** to switch tabs, **Up/Down** to navigate rows, and press **Spacebar** or your HOTAS trigger to copy the target name to your clipboard.
+### Step 4: Validate and Fly
+Validate your package structure using `mfdkit`:
+```cmd
+mfdkit validate plugins\edvr_mfd\mfds\my_tracker
+```
+Put on your VR headset in Elite Dangerous. Your display will render immediately in your cockpit. Look at it to focus, use **Q/E** to switch tabs, **Up/Down** to navigate rows, and press **Spacebar** (or HOTAS trigger) to copy target names to your clipboard.
 
 ---
 
-## 2. Directory Layout Standard
+## 2. Package Directory Layout Standard
 
-All files used by the MFD subsystem reside inside the dedicated `plugins/edvr_mfd/` directory:
+All packages are placed under `<game_dir>\plugins\edvr_mfd\mfds\<package_id>\`:
 
 ```text
 <Elite Dangerous Odyssey Game Folder>\
-    d3d11.dll                       <-- EDVR DirectX 11 Graphics Proxy
-    Openvr\win64\openvr_api.dll      <-- EDVR Native OpenXR VR Runtime
     plugins\
         edvr_mfd\
-            plugin.dll              <-- Cockpit MFD Plugin Engine
-            settings.ini            <-- Position, rotation, scale, theme overrides
-            events.jsonl            <-- Interaction event log emitted by pilot inputs
-            displays\               <-- Custom declarative MFD JSON definitions
-                spansh_router.json  <-- Center console display
-                engineering.json    <-- Left console display
-                exobiology.json     <-- Right console display
+            plugin.dll
+            edvr_mfd.ini
+            mfds\
+                <package_id>\
+                    manifest.json               <-- Author-owned static manifest
+                    screens\
+                        <screen_id>.json        <-- Live screen definition (written by companion)
+                    bin\                        <-- Optional companion executables
+                        edvr-mfd-companion.exe
+                    events.jsonl                <-- Action stream emitted by pilot inputs
+                    companion.log               <-- Redirected stdout/stderr of companion
 ```
 
----
-
-## 3. JSON Structure & Schema Reference
-
-An MFD JSON file defines the entire visual structure and interaction model of a display screen.
-
-### Root Object Properties
-
-| Property | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `title` | `string` | Yes | Top banner header title displayed on the MFD bezel | `"SPANSH NEUTRON ROUTER"` |
-| `subtitle` | `string` | No | Secondary contextual subtitle below title | `"WAYPOINT 2 OF 14"` |
-| `statusBadge` | `string` | No | Status badge tag displayed in the upper-right corner | `"ONLINE"`, `"NOMINAL"`, `"SCANNING"`, `"WARNING"` |
-| `footerHint` | `string` | No | Navigation and control hint shown in bottom footer bar | `"[Q/E] TABS   [UP/DN] SELECT   [SPACE] COPY"` |
-| `tabs` | `array` | Yes | Array of one or more tab objects | `[ { ... }, { ... } ]` |
+### Path & Security Rules:
+- Package folder name **must match** `manifest.json` `id` exactly.
+- Package IDs must match `^[a-z0-9][a-z0-9_-]{1,31}$`.
+- All screen file paths and companion executable paths must stay within the package folder (paths containing `..` escaping root are rejected). Absolute companion paths are permitted for system-wide tools.
 
 ---
 
-### Tab Object Properties
+## 3. Package Manifest Schema (v1) Reference
 
-Each entry in the `tabs` array represents a distinct screen tab accessible via tab cycling inputs (**Q/E** or HOTAS Hat Left/Right).
-
-| Property | Type | Required | Description |
+| Field | Type | Required | Description |
 |---|---|---|---|
-| `title` | `string` | Yes | Tab title displayed in the tab bar header (e.g. `"ROUTE"`, `"POWER"`, `"LOG"`) |
-| `type` | `string` | Yes | Tab layout type: `"list"`, `"keyvalue"`, or `"text"` |
-| `items` | `array` | Yes | Array of row items (schema depends on `type` below) |
+| `manifestVersion` | `integer` | Yes | Must be `1`. |
+| `id` | `string` | Yes | Unique package ID matching directory name. |
+| `name` | `string` | Yes | Human-readable package title. |
+| `version` | `string` | Yes | Semantic version string (e.g. `"1.0.0"`). Used by installer for no-overwrite protection. |
+| `author` | `string` | No | Author or organization name. |
+| `description` | `string` | No | Description of package functionality. |
+| `minPluginVersion`| `string` | No | Minimum EDVR MFD plugin version required. |
+| `screens` | `array` | Yes | Array of screen definitions (see below). |
+| `companions` | `array` | No | Array of companion daemons to supervise (see below). |
+
+### Screen Declaration Schema:
+```json
+{
+  "id": "modules",
+  "file": "screens/modules.json",
+  "title": "MODULES",
+  "pose": {
+    "position": [-0.45, -0.22, -0.48],
+    "pitchDeg": -22.0,
+    "yawDeg": 32.0,
+    "widthM": 0.24,
+    "heightM": 0.16
+  },
+  "contexts": ["ship_cockpit", "fighter"],
+  "excludeContexts": [],
+  "autoHideUntilGaze": false
+}
+```
+
+- `pose`: Optional 3D cockpit transform (`position` in meters $[x, y, z]$, `pitchDeg`, `yawDeg`, `widthM`, `heightM`). If omitted, auto-layout places the screen in the next available console slot.
+- `contexts`: List of context strings when screen is rendered.
+- `excludeContexts`: List of context strings when screen is hidden.
+- `autoHideUntilGaze`: If `true`, panel remains invisible until focused by gaze.
+
+### Companion Declaration Schema:
+```json
+{
+  "id": "ship-feed",
+  "exe": "bin/edvr-mfd-ship.exe",
+  "args": ["--rate", "2s"],
+  "env": { "EDVR_LOG_LEVEL": "info" },
+  "restart": "on-failure"
+}
+```
+
+- `restart`: Restart policy:
+  - `"on-failure"`: Restart automatically if exit code != 0 with exponential backoff.
+  - `"always"`: Continually restart whenever process exits.
+  - `"never"`: Run once, do not restart upon exit.
 
 ---
 
-### Tab Types & Item Schemas
+## 4. Declarative Display Schema (v1) Reference
+
+Screen display JSON files define visual styling and layout:
+
+```json
+{
+  "title": "HEADER TITLE",
+  "subtitle": "SUBTITLE",
+  "statusBadge": "STATUS",
+  "statusBadgeColor": "green",
+  "footerHint": "[Q/E] TABS   [UP/DN] SELECT   [SPACE] ACTIVATE",
+  "theme": "amber",
+  "tabs": [ ... ]
+}
+```
+
+### Header & Styling Fields:
+- `title` (`string`): Top banner title.
+- `subtitle` (`string`): Optional subtitle below header.
+- `statusBadge` (`string`): Upper-right badge label (e.g. `"LIVE"`, `"SCANNING"`).
+- `statusBadgeColor` (`string`): Color for badge: `"amber"`, `"cyan"`, `"green"`, `"red"`, `"white"`, `"blue"`.
+- `footerHint` (`string`): Control instructions shown in footer.
+- `theme` (`string`): Color theme: `"amber"`, `"cyan"`, `"green"`, `"white"`, `"red"`, `"blue"`.
+
+### Tab Object Structure:
+Every tab has:
+- `title` (`string`): Name on tab bar.
+- `type` (`string`): `"list"`, `"keyvalue"`, or `"text"`.
+- `items` (`array`): Content rows according to type.
 
 #### 1. List Tab (`"type": "list"`)
-Presents an interactive, scrollable list of rows with selection highlighting and action callbacks.
-
-Each object in `items` supports:
-
-| Field | Type | Description | Example |
-|---|---|---|---|
-| `id` | `string` | Unique identifier passed to action handlers / event stream | `"wp_01"`, `"comm_palladium"` |
-| `label` | `string` | Primary row text / label (left aligned) | `"Jackson's Lighthouse"` |
-| `value` | `string` | Metric / numeric value (right aligned) | `"12.4 LY"`, `"42,100 CR"` |
-| `sublabel` | `string` | Secondary descriptive text placed under the label | `"Neutron Star - Supercharge Ready"` |
-| `badge` | `string` | Optional highlighted badge tag on the right | `"CURRENT"`, `"NEXT"`, `"REFUEL"`, `"NEW"` |
-
-**Example List Tab:**
+Scrollable row items:
 ```json
 {
-  "title": "MARKET",
-  "type": "list",
-  "items": [
-    {
-      "id": "item_gold",
-      "label": "Gold",
-      "value": "48,250 CR",
-      "sublabel": "Supply: 14,200 T (High)",
-      "badge": "BUY"
-    },
-    {
-      "id": "item_beryllium",
-      "label": "Beryllium",
-      "value": "8,120 CR",
-      "sublabel": "Supply: 2,400 T (Med)",
-      "badge": "BUY"
-    }
-  ]
+  "id": "item_id_01",
+  "label": "Primary Label Text",
+  "value": "Value / Metric",
+  "sublabel": "Secondary description text",
+  "badge": "TAG",
+  "badgeColor": "cyan"
 }
 ```
-
----
 
 #### 2. Key-Value Tab (`"type": "keyvalue"`)
-Presents a two-column telemetry / metrics summary grid.
-
-Each object in `items` supports:
-
-| Field | Type | Description | Example |
-|---|---|---|---|
-| `key` | `string` | Metric name / label (left column) | `"SYS Distributor"`, `"Gravity"` |
-| `value` | `string` | Metric value / reading (right column) | `"4.0 PIP"`, `"0.42 G"` |
-
-**Example Key-Value Tab:**
+Two-column metric summaries:
 ```json
 {
-  "title": "TELEMETRY",
-  "type": "keyvalue",
-  "items": [
-    { "key": "Current System", "value": "Sol" },
-    { "key": "Target System", "value": "Colonia" },
-    { "key": "Fuel Reserve", "value": "98% (31.4 T)" },
-    { "key": "Cargo Capacity", "value": "64 / 128 T" },
-    { "key": "Shield Integrity", "value": "100%" }
-  ]
+  "key": "Metric Name",
+  "value": "Metric Reading",
+  "valueColor": "green"
 }
 ```
-
----
 
 #### 3. Text Tab (`"type": "text"`)
-Presents a scrollable multi-line text terminal for mission briefings, lore, captain's logs, or raw event streams.
-
-The `items` array contains plain strings (one per line):
-
-**Example Text Tab:**
+Array of strings:
 ```json
-{
-  "title": "LOG",
-  "type": "text",
-  "items": [
-    "[22:14:05] Hyperspace jump initiated to Synuefe GT-X b42-3",
-    "[22:14:22] FSD cool down complete",
-    "[22:14:30] Fuel scoop engaged: +1.2 T/s",
-    "[22:15:10] High-value bio signal detected on Body A 1"
-  ]
-}
+[
+  "System telemetry active",
+  "No hostile contacts detected"
+]
 ```
 
 ---
 
-## 4. In-Cockpit Interaction & Control Flow
+## 5. Bidirectional Interaction via `events.jsonl`
 
-The MFD system is built for hands-on VR flight without needing to touch a mouse or 2D window.
+When a pilot interacts with an item (pressing **Spacebar** / HOTAS trigger):
+1. The item's `label` (or primary value) is copied to the Windows OS clipboard for instant pasting into the Galaxy Map.
+2. An interaction event is written to `<pkg_dir>\events.jsonl`.
 
-```
-                  ┌──────────────────────┐
-                  │    PILOT VR HEAD     │
-                  │ (Gaze Cone Raycast)  │
-                  └──────────┬───────────┘
-                             │ Look at display (0.15s dwell)
-                             ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       FOCUSED MFD SLOT                      │
-│  - Swallows game inputs to prevent accidental ship firing   │
-│  - Unfades display if auto-hide is active                   │
-│  - Routes HOTAS / Keyboard navigation commands              │
-└────────────────────────────┬────────────────────────────────┘
-                             │
-            ┌────────────────┴────────────────┐
-            ▼                                 ▼
-   [Q / E / Hat Left-Right]        [Space / Enter / Trigger]
-         Cycle Tabs                     Activate Item
-                                              │
-                         ┌────────────────────┴────────────────────┐
-                         ▼                                         ▼
-                 Copy to Clipboard                      Write to `events.jsonl`
-             (e.g. System Name for paste)            (for external apps/scripts)
-```
-
-### Input Actions Table
-
-| Action | Default Keyboard | Default HOTAS / Controller | Function |
-|---|---|---|---|
-| **Focus** | Look at MFD (Center / Left / Right) | Look at MFD | Activates input routing for the hovered display |
-| **Tab Next** | `E` | Hat Right / Secondary Bumper | Switches to the next tab |
-| **Tab Prev** | `Q` | Hat Left / Primary Bumper | Switches to the previous tab |
-| **Select Down** | `Down Arrow` | Hat Down | Scrolls selection down |
-| **Select Up** | `Up Arrow` | Hat Up | Scrolls selection up |
-| **Activate** | `Spacebar` / `Enter` | Primary Trigger / Joy Button 1 | Executes action (copies value to clipboard and emits event) |
-| **Adjust Left** | `Left Arrow` | Hat Left (on Settings) | Decrements setting value on Settings tab |
-| **Adjust Right** | `Right Arrow` | Hat Right (on Settings) | Increments setting value on Settings tab |
-
----
-
-## 5. Bidirectional Integration via `events.jsonl`
-
-When a pilot interacts with an MFD list item (e.g. pressing Spacebar / trigger on a commodity or waypoint), the MFD engine automatically:
-1. Copies the item's `label` (or primary target text) to the Windows clipboard for instant pasting into the Galaxy Map or System Map.
-2. Appends a structured JSON event record to `<game_dir>\plugins\edvr_mfd\events.jsonl`.
-
-### Event Schema
+### Event Structure:
 ```json
 {
-  "timestamp": "2026-09-28T22:30:15Z",
+  "timestamp": "2026-10-15T19:30:15Z",
   "slot": "main_mfd",
-  "display": "market_browser",
-  "tab": "COMMODITIES",
+  "package": "my_tracker",
+  "screen": "bounties",
+  "tab": "BOUNTIES",
   "action": "activate",
-  "item_id": "item_palladium",
-  "label": "Palladium",
-  "value": "42,500 CR"
+  "item_id": "target_1",
+  "label": "Pirate Lord Vane",
+  "value": "2,450,000 CR"
 }
 ```
 
-### External App Workflow (Python / Go / C# / VoiceAttack)
-External apps can tail `events.jsonl` to provide dynamic, two-way interactive experiences:
-- **Market Drill-down**: When the pilot selects `"Palladium"`, your Python script catches the event, fetches the top 5 nearest stations buying Palladium from Inara/EDDN, and overwrites `displays/market_stations.json`. The MFD instantly displays the stations in VR.
-- **Route Sequencing**: When the pilot reaches a waypoint and presses Select, VoiceAttack or your router script advances the route and updates `spansh_router.json`.
+External tools or companion daemons tail `events.jsonl` to advance waypoints, fetch remote data, or update checklist states.
 
-**Python Event Listener Example:**
-```python
-import json
-import time
+---
 
-EVENT_LOG = r"D:\SteamLibrary\steamapps\common\Elite Dangerous\Products\elite-dangerous-odyssey-64\plugins\edvr_mfd\events.jsonl"
+## 6. Developer Tooling (`mfdkit`)
 
-def watch_events():
-    with open(EVENT_LOG, "r", encoding="utf-8") as f:
-        f.seek(0, 2) # Seek to end
-        while True:
-            line = f.readline()
-            if line:
-                event = json.loads(line.strip())
-                print(f"[MFD Interaction] Pilot clicked {event.get('label')} (ID: {event.get('item_id')})")
-                handle_mfd_event(event)
-            else:
-                time.sleep(0.05)
+EDVR MFD provides `mfdkit` for validating and testing packages without launching the game:
 
-def handle_mfd_event(event):
-    if event.get("item_id") == "item_palladium":
-        # Overwrite stations JSON with nearest buyers
-        pass
+### Package Validation
+```cmd
+mfdkit validate packages\ship
+```
+Checks:
+- Valid `manifest.json` schema and regex identifiers.
+- Screen files exist and pass display schema checks.
+- Companion executables exist and have safe paths.
 
-if __name__ == "__main__":
-    watch_events()
+### Session Recording & Replay
+Record live telemetry and replay it deterministically:
+```cmd
+mfdkit record --out ./fixtures/session_jump --duration 60s
+mfdkit replay --in ./fixtures/session_jump --out ./test_journals --speed 2x
 ```
 
 ---
 
-## 6. Cockpit Spatial Positioning & INI Overrides
+## 7. Best Practices for Companion Developers
 
-Display geometry, positioning, auto-hide dwell times, and color themes are saved per-slot in `settings.ini` inside `plugins/edvr_mfd/` (and backed up to `%LOCALAPPDATA%\EDVR\plugins\edvr_mfd\settings.ini`).
-
-### Default Slot Layouts
-- `slot.main_mfd`: Center Console (Position: `X=0.00, Y=-0.16, Z=-0.55`, Pitch: `-20°`)
-- `slot.left_mfd`: Left Console (Position: `X=-0.45, Y=-0.22, Z=-0.48`, Pitch: `-22°`, Yaw: `+32°`)
-- `slot.right_mfd`: Right Console (Position: `X=+0.45, Y=-0.22, Z=-0.48`, Pitch: `-22°`, Yaw: `-32°`)
-
-### `settings.ini` Configuration Keys
-
-```ini
-[slot.main_mfd]
-pos_x = 0.0000          ; Lateral position in meters (-left / +right)
-pos_y = -0.1600         ; Vertical position in meters (-down / +up)
-pos_z = -0.5500         ; Depth position in meters (-forward / +backward)
-pitch = -20.00          ; Tilt angle in degrees (-tilt up / +tilt down)
-yaw = 0.00              ; Swivel angle in degrees (-pan left / +pan right)
-scale = 1.00            ; Size scale factor (0.50 to 2.00)
-opacity = 0.75          ; Background bezel & panel opacity (0.00 to 1.00)
-locked = 1              ; 1 = Anchored to cockpit 3D space, 0 = Head-locked HUD
-auto_hide = 0           ; 1 = Invisible until gazed upon, 0 = Always visible
-dwell_delay = 0.15      ; Time in seconds looking at display before focus activates
-release_delay = 0.35    ; Time in seconds looking away before focus deactivates
-cone_margin = 1.20      ; Hit cone angular tolerance multiplier
-theme = 0               ; Built-in palette: 0=Amber, 1=Cyan, 2=Green, 3=White, 4=Red, 5=Blue
-use_custom_color = 0    ; 1 = Use custom RGB vector line color below
-custom_r = 255
-custom_g = 110
-custom_b = 0
-custom_a = 255
-```
-
----
-
-## 7. F8 In-Headset Menu Integration
-
-The Cockpit MFD Addon registers its controls directly into the **EDVR F8 In-Headset Menu** under the `"Plugins"` tab:
-
-- **Section Header**: `"Cockpit MFD"` (alphabetically organized among installed plugins)
-- **Controls**:
-  - `Show all windows` (`On` / `Off`): Forces all configured cockpit displays to be visible simultaneously.
-  - `Cockpit MFD Displays` (`On` / `Off`): Master enable/disable toggle.
-  - `Active displays` (`1 (Center)`, `2 (Center + Left)`, `3 (All Three)`): Sets the number of active in-cockpit screens.
-  - `Head-locked HUD` (`On` / `Off`): Toggles between 3D cockpit-anchored displays and head-tracked HUD mode.
-
----
-
-## 8. Best Practices for External Developers
-
-1. **Atomic File Writes**: Always write updated JSON to a temporary file (e.g. `spansh_router.json.tmp`) and atomically rename / replace `spansh_router.json`. This prevents the MFD engine from reading a partially written JSON file during active frame rendering.
-2. **Update Rates**: Update display files only when data changes or at sensible intervals (1 Hz to 4 Hz). Avoid writing files at 60+ Hz to prevent disk I/O churn.
-3. **Elite Status Integration**: Use `%USERPROFILE%\Saved Games\Frontier Developments\Elite Dangerous\Status.json` and Journal logs (`Journal.*.log`) to drive live data (current system, fuel level, pips, cargo, exobiology scan status).
-4. **Clean IDs**: Use clear, semantic `id` strings for list items (`"system_sol"`, `"nav_route_step_3"`) so external event listeners can dispatch actions unambiguously.
+1. **Atomic File Writes**: Write updated screen content to `<file>.tmp` and atomically rename/replace the target `.json` file. This prevents the MFD engine from reading partial writes.
+2. **Throttled Updates**: Write files only when telemetry changes or at 1–4 Hz intervals. Do not hammer the disk at 60 Hz.
+3. **Telemetry Sources**: Monitor `%USERPROFILE%\Saved Games\Frontier Developments\Elite Dangerous\Status.json`, `NavRoute.json`, `ModulesInfo.json`, `Cargo.json`, and `Journal.*.log`.
+4. **Graceful Teardown**: Listen for standard termination signals (`SIGINT`, `SIGTERM`, `CTRL_CLOSE_EVENT`) to cleanly flush caches and close open file handles.

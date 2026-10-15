@@ -1,9 +1,9 @@
-# EDVR Cockpit MFD — Architecture & Design Specification
+# EDVR Cockpit MFD — Architecture & Design Specification (v1.0)
 
 ## Status
-- **Architecture State**: Decoupled, file-driven in-cockpit VR rendering engine and input router.
-- **Directory Standard**: `plugins/edvr_mfd/plugin.dll` with per-plugin asset isolation.
-- **Data Model**: JSON Declarative Display Schema (`displays/*.json`) with live hot-reloading and bidirectional event stream (`events.jsonl`).
+- **Architecture State**: Decoupled, package-driven in-cockpit VR rendering engine, companion supervisor, and input router.
+- **Directory Standard**: `plugins/edvr_mfd/mfds/<pkg_id>/` with full package isolation.
+- **Data Model**: Manifest Schema v1 (`manifest.json`) and Declarative Display Schema v1 (`screens/<screen_id>.json`) with live hot-reloading, companion supervision, and bidirectional event stream (`events.jsonl`).
 
 ---
 
@@ -12,256 +12,255 @@
 The EDVR Cockpit MFD addon transforms Elite Dangerous VR by providing hardware-accelerated, vector-drawn, interactive Multi-Function Displays positioned in seated 3D cockpit space.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       EXTERNAL APPS                         │
-│  (EDDiscovery, EDDI, Spansh Tools, VoiceAttack, Python)     │
-└──────────────┬──────────────────────────────▲───────────────┘
-  writes JSON  │                              │ reads events
-  display data │                              │ (interactions)
-               ▼                              │
-┌──────────────────────────────┬──────────────┴──────────────┐
-│  plugins/edvr_mfd/           │ plugins/edvr_mfd/           │
-│  displays/*.json             │ events.jsonl                │
-└──────────────┬───────────────┴─────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                        SUPERVISED COMPANIONS                           │
+│   (edvr-mfd-ship, edvr-mfd-route, edvr-mfd-exploration, Python, etc.)  │
+└──────────────┬────────────────────────────────────────▲────────────────┘
+  writes JSON  │                                        │ reads events
+  screen data  │                                        │ (interactions)
+               ▼                                        │
+┌───────────────────────────────────────┬───────────────┴────────────────┐
+│  plugins/edvr_mfd/mfds/<pkg_id>/      │ plugins/edvr_mfd/mfds/<pkg_id>/│
+│  screens/<screen_id>.json             │ events.jsonl                   │
+└──────────────┬────────────────────────┴────────────────────────────────┘
                │ hot-reloads on file write
                ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 EDVR MFD RENDERING ENGINE                   │
-│   - 3D Cockpit Projective Quad Layer Compositor (OpenXR)    │
-│   - Head/Eye Gaze Cone Tracking with Auto-Hide & Fade       │
-│   - DirectInput / HOTAS Input Gate & Tab Router             │
-│   - Vector Wireframe Rasterizer & High-Legibility Font      │
-│   - In-Cockpit Interactive SETTINGS Tab & Persistence       │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                  EDVR MFD RENDERING ENGINE & RUNTIME                   │
+│   - 3D Cockpit Projective Quad Layer Compositor (OpenXR / D3D11)       │
+│   - Head/Eye Gaze Cone Tracking with Auto-Hide & Smooth Fade           │
+│   - Game Context Evaluator (Status.json & GuiFocus filtering)          │
+│   - Companion Lifecycle Supervisor (Spawn, Backoff Restart, Logging)   │
+│   - DirectInput / HOTAS Input Gate & Tab Router                        │
+│   - Vector Wireframe Rasterizer & High-Legibility Font Engine          │
+│   - F8 In-Headset Settings (Master, Hide All, Slot Count, Per-Package) │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Core Tenets:
-1. **Decoupled Data Architecture**: The MFD plugin is purely a high-performance **in-cockpit rendering engine and input router**. It does not fetch remote API data directly; instead, third-party apps, scripts, or local daemons manage data by writing declarative `.json` files.
-2. **Language-Agnostic Extensibility**: Anyone can build custom MFDs using Python, C#, Go, Node.js, or simple text editors—zero C++ or DLL compilation required.
-3. **Hot-Reloading in VR**: Modifying a `.json` file on a 2D monitor immediately re-renders the display inside the VR headset on the next frame.
-4. **Bidirectional Interaction**: Pilot interactions (HOTAS/joystick buttons, Spacebar, Hat switches) trigger tab navigation, checkbox toggles, clipboard copies, and write structured events to `events.jsonl` for external apps to consume.
+1. **Decoupled Data Architecture**: The MFD plugin is purely a high-performance **in-cockpit rendering engine, companion supervisor, and input router**. It never touches external game APIs or network services directly; instead, background companions write declarative JSON screens and react to JSONL events.
+2. **Package Platform Isolation**: Every MFD is an isolated package located in `plugins/edvr_mfd/mfds/<pkg_id>/`. Each package contains its author-owned `manifest.json`, screen views, companion binaries, and runtime logs.
+3. **Hot-Reloading in VR**: Modifying a `.json` screen file on disk reloads asynchronously via directory change notifications without blocking the render loop or dropping VR frames.
+4. **Supervised Companion Daemons**: The plugin manages the execution lifecycle of declared companion executables (`bin/<exe>`), redirecting stdout/stderr to `companion.log`, supervising exit codes, and restarting failing companions with exponential backoff.
+5. **Bidirectional Interaction**: Pilot interactions (HOTAS buttons, keyboard keys, Hat switches) trigger tab cycling, list scrolling, clipboard copying, and append structured event objects to `events.jsonl`.
+6. **Robust Context Gating**: Real-time evaluation of `Status.json` flags and `GuiFocus` modal indicators. MFDs automatically hide during Galaxy Map, System Map, Orrery, FSS, SAA, and Codex navigation.
 
 ---
 
 ## 2. Directory Layout Standard
 
-To maintain clean separation and eliminate plugin clutter, all plugin binaries, configs, templates, and event streams live within a dedicated plugin subdirectory:
+All MFD components reside within `<game_dir>\plugins\edvr_mfd\`:
 
-```
+```text
 <Elite Dangerous Odyssey Game Folder>\
-    d3d11.dll
-    Openvr\win64\openvr_api.dll
+    d3d11.dll                       <-- EDVR DirectX 11 Graphics Proxy
+    openvr\win64\openvr_api.dll     <-- EDVR Native OpenXR VR Runtime
     plugins\
         edvr_mfd\
-            plugin.dll                <-- MFD plugin binary
-            edvr_mfd.ini              <-- User coordinate overrides & settings persistence
-            events.jsonl              <-- Action stream emitted by pilot in-headset interactions
-            displays\                 <-- Declarative MFD JSON display files
-                spansh_router.json    <-- Center console Spansh neutron route display
-                engineering.json      <-- Left console power & module status display
-                exobiology.json       <-- Right console survey & exobiology display
-                trade_market.json     <-- Custom pilot / tool displays
+            plugin.dll              <-- MFD plugin binary
+            edvr_mfd.ini            <-- User coordinates & settings persistence
+            mfds\                   <-- Installed MFD packages
+                ship\
+                    manifest.json   <-- Package metadata & declarations
+                    screens\        <-- Screen definitions
+                        modules.json
+                        power.json
+                        cargo.json
+                    bin\
+                        edvr-mfd-ship.exe  <-- Supervised companion binary
+                    events.jsonl    <-- Action stream emitted by pilot inputs
+                    companion.log   <-- Supervised companion process log
+                route\
+                    manifest.json
+                    screens\
+                        route.json
+                    bin\
+                        edvr-mfd-route.exe
+                    events.jsonl
+                    companion.log
+                exploration\
+                    manifest.json
+                    screens\
+                        system.json
+                        bio.json
+                    bin\
+                        edvr-mfd-exploration.exe
+                    events.jsonl
+                    companion.log
 ```
 
 ---
 
-## 3. JSON Declarative Display Schema
+## 3. Package Manifest Schema (v1)
 
-Every `.json` file in `displays/` defines an independent in-cockpit MFD display. Default positions, rotation angles, scale, gaze timings, and contextual activity gating are declared within the file itself.
-
-### Full Schema Definition:
+Each package root contains `manifest.json` describing package identity, screen definitions, and companion specifications:
 
 ```json
 {
-  "id": "trade_market",
-  "title": "SYSTEM COMMODITY MARKET",
-  "subtitle": "BEST SELL ROUTES (30 LY)",
-  "statusBadge": "LIVE",
-  "statusBadgeColor": "green",
-  "footerHint": "[Q/E] TABS   [UP/DN] SELECT   [SPACE] INTERACT",
-  
-  "defaultSlot": "left_mfd",
-  "defaultPose": {
-    "position": [-0.45, -0.22, -0.48],
-    "pitch": -22.0,
-    "yaw": 32.0,
-    "scale": 1.0,
-    "opacity": 0.75,
-    "trackingLocked": true
-  },
-  
-  "defaultGaze": {
-    "autoHide": false,
-    "dwellDelay": 0.15,
-    "releaseDelay": 0.35,
-    "coneMargin": 1.15,
-    "anchorOffsetY": 0.0
-  },
-  
-  "activityGating": [
-    "ship",
-    "in_flight",
-    "analysis_mode"
+  "manifestVersion": 1,
+  "id": "ship",
+  "name": "Ship Readout",
+  "version": "1.0.0",
+  "author": "EDVR MFD",
+  "description": "Module integrity, power and cargo.",
+  "minPluginVersion": "1.0.0",
+  "screens": [
+    {
+      "id": "modules",
+      "file": "screens/modules.json",
+      "title": "MODULES",
+      "pose": {
+        "position": [-0.45, -0.22, -0.48],
+        "pitchDeg": -22.0,
+        "yawDeg": 32.0,
+        "widthM": 0.24,
+        "heightM": 0.16
+      },
+      "contexts": ["ship_cockpit", "fighter"],
+      "excludeContexts": [],
+      "autoHideUntilGaze": false
+    }
   ],
-  
+  "companions": [
+    {
+      "id": "ship-feed",
+      "exe": "bin/edvr-mfd-ship.exe",
+      "args": [],
+      "env": {},
+      "restart": "on-failure"
+    }
+  ]
+}
+```
+
+### Manifest Specifications:
+- `manifestVersion`: Required integer (must equal `1`).
+- `id`: Unique package identifier matching regex `^[a-z0-9][a-z0-9_-]{1,31}$`. Must match the package folder name.
+- `screens`: List of screen declarations.
+  - `id`: Unique screen ID within the package.
+  - `file`: Path relative to package root (e.g. `screens/modules.json`). Relative paths that escape the package root (`..`) are rejected.
+  - `pose`: Optional 3D spatial positioning override (`position` [x, y, z] in meters, `pitchDeg`, `yawDeg`, `widthM`, `heightM`). If omitted, automatic slot layout is assigned.
+  - `contexts`: Context list when screen should be visible.
+  - `excludeContexts`: Context list when screen should be suppressed.
+  - `autoHideUntilGaze`: Boolean indicating whether screen stays hidden until gazed upon.
+- `companions`: List of companion executables to supervise.
+  - `id`: Unique companion identifier.
+  - `exe`: Executable path relative to package root or absolute path. Paths traversing `..` outside package are rejected.
+  - `restart`: Restart policy: `"on-failure"` (restart if exit code != 0), `"always"` (restart on any exit), or `"never"`.
+
+---
+
+## 4. Declarative Screen Display Schema (v1)
+
+Screen files (`screens/<screen_id>.json`) define the visual content, tabs, and interactive elements of each display:
+
+```json
+{
+  "title": "SHIP MODULES",
+  "subtitle": "INTEGRITY & POWER DRAW",
+  "statusBadge": "NOMINAL",
+  "statusBadgeColor": "green",
+  "footerHint": "[Q/E] TABS   [UP/DN] SELECT   [SPACE] ACTIVATE",
   "theme": "cyan_ice",
-  "customColor": {
-    "r": 60,
-    "g": 200,
-    "b": 255,
-    "a": 255
-  },
-  
   "tabs": [
     {
-      "title": "PRICES",
+      "title": "MODULES",
       "type": "list",
       "items": [
         {
-          "id": "item_tritium",
-          "label": "Tritium",
-          "value": "52,400 CR",
-          "sublabel": "Carrier Fuel - High Demand",
-          "badge": "+18%",
-          "badgeColor": "green",
-          "onInteract": {
-            "type": "switch_tab",
-            "targetTab": "STATIONS",
-            "copyText": "Tritium",
-            "emitEvent": true
-          }
-        },
-        {
-          "id": "item_gold",
-          "label": "Gold",
-          "value": "48,200 CR",
-          "sublabel": "Metals - Medium Demand",
-          "badge": "+5%",
-          "badgeColor": "amber",
-          "onInteract": {
-            "type": "switch_tab",
-            "targetTab": "STATIONS",
-            "copyText": "Gold",
-            "emitEvent": true
-          }
+          "id": "mod_fsd",
+          "label": "Frame Shift Drive 5A",
+          "value": "100%",
+          "sublabel": "Draw: 0.60 MW  (P1)",
+          "badge": "ONLINE",
+          "badgeColor": "green"
         }
       ]
     },
     {
-      "title": "STATIONS",
+      "title": "SPECS",
       "type": "keyvalue",
       "items": [
-        {"key": "Target Commodity", "value": "Tritium", "valueColor": "cyan"},
-        {"key": "Best Buyer", "value": "Ray Gateway (Diaguandri)"},
-        {"key": "Buy Price", "value": "52,400 CR", "valueColor": "green"},
-        {"key": "Demand", "value": "14,200 T"},
-        {"key": "Distance", "value": "12.4 LY (1 Jump)"},
-        {"key": "Pad Size", "value": "Large (L)"}
+        { "key": "Power Plant", "value": "Overcharged 5A (34.5 MW)" },
+        { "key": "Retracted Draw", "value": "22.4 MW (65%)" },
+        { "key": "Deployed Draw", "value": "28.9 MW (84%)" }
       ]
     },
     {
-      "title": "CHECKLIST",
-      "type": "checklist",
+      "title": "LOG",
+      "type": "text",
       "items": [
-        {
-          "id": "chk_limpets",
-          "label": "Restock Collector Limpets",
-          "checked": true,
-          "onInteract": {
-            "type": "toggle_state",
-            "emitEvent": true
-          }
-        },
-        {
-          "id": "chk_fss",
-          "label": "FSS Honk Star System",
-          "checked": false,
-          "onInteract": {
-            "type": "toggle_state",
-            "emitEvent": true
-          }
-        }
+        "[22:01:10] Power distributor initialized",
+        "[22:04:33] Hardpoints deployed"
       ]
     }
   ]
 }
 ```
 
----
-
-## 4. Interactive Action System (`onInteract`)
-
-When the pilot presses the **Interact** input (Spacebar, Primary Joystick Button / HOTAS Button A), the MFD engine evaluates the item's `onInteract` definition:
-
-### Supported Action Types:
-
-1. **`switch_tab` (Navigation & Deep-Dive)**:
-   - Switches the active MFD tab to `targetTab`.
-   - Allows master-detail navigation workflows (e.g. clicking a system in a route list switches to a telemetry or market tab for that specific system).
-
-2. **`toggle_state` (Interactive Checklists & Booleans)**:
-   - Inverts the item's checked/active state.
-   - Automatically re-renders with visual indicators: checked `[X]` (green) vs unchecked `[ ]` (dim).
-
-3. **`cycle_filter` (Sorting & Mode Toggles)**:
-   - Cycles through a list of filter states (e.g. `Sort by: [Profit] -> [Distance] -> [Supply]`).
-
-4. **`copy` (Clipboard Injection)**:
-   - Copies `copyText` (or `label` / `value`) directly into the Windows OS clipboard for pasting into the game's Galaxy Map search.
-
-5. **`emit_event` (External App Bridge)**:
-   - Appends a structured JSON event to `<game_dir>\plugins\edvr_mfd\events.jsonl`:
-     ```json
-     {
-       "timestamp": 1727560123,
-       "mfdId": "trade_market",
-       "tabTitle": "PRICES",
-       "itemId": "item_tritium",
-       "action": "switch_tab",
-       "label": "Tritium",
-       "value": "52,400 CR"
-     }
-     ```
-
-6. **`uri` (External Protocol Launch)**:
-   - Launches an external URI in the background (e.g. `https://spansh.co.uk/system/...` or desktop companion tools).
+### Supported Tab Types:
+1. **List Tab (`"type": "list"`)**:
+   Interactive, scrollable list of rows with selection cursor, item IDs, values, sublabels, and color-coded status badges.
+2. **Key-Value Tab (`"type": "keyvalue"`)**:
+   Two-column telemetry readouts formatting metrics, values, and optional value highlights.
+3. **Text Tab (`"type": "text"`)**:
+   Multi-line text terminal displaying scrollable logs, status reports, or mission notes.
 
 ---
 
-## 5. Contextual Activity Gating
+## 5. Companion Supervision Architecture
 
-The MFD engine continuously evaluates the vehicle and flight state from the game's `Status.json` Flags bitmask. A display only renders when its `activityGating` conditions are met:
+The plugin runtime includes a dedicated `CompanionSupervisor` subsystem:
 
-| Gating Identifier | Trigger Condition |
-| :--- | :--- |
-| `"always"` | Active at all times in-cockpit. |
-| `"ship"` | Active when piloting a main Starship. |
-| `"srv"` | Active when driving a Surface Recon Vehicle (SRV). |
-| `"fighter"` | Active when piloting a Ship-Launched Fighter (SLF). |
-| `"on_foot"` | Active during On-Foot exploration. |
-| `"in_flight"` | Active only during space or atmospheric flight (hidden when docked/landed). |
-| `"docked"` | Active only when docked at a station, outpost, or landed on a planetary surface. |
-| `"hardpoints"` | Active only when hardpoints are deployed. |
-| `"combat_mode"` | Active when in Combat HUD mode (Orange reticle). |
-| `"analysis_mode"` | Active when in Analysis HUD mode (Blue scanner reticle). |
+1. **Lifecycle Management**:
+   - Discovered companion processes are launched during plugin initialization or when entering valid game contexts.
+   - Standard output and standard error streams are redirected to `<pkg_dir>/companion.log`.
+2. **Crash & Restart Handling**:
+   - Process exits are polled non-blockingly via Win32 process handles (`GetExitCodeProcess`).
+   - If a companion configured with `"on-failure"` exits with non-zero status, or `"always"` terminates, it is restarted using exponential backoff (1s, 2s, 4s, up to 30s) to prevent CPU thrashing.
+3. **Clean Teardown**:
+   - On game exit, plugin shutdown, or DLL unload, all active companion processes receive graceful termination signals followed by Win32 `TerminateProcess` if unhandled.
 
 ---
 
-## 6. Dynamic In-Cockpit SETTINGS Tab & Persistence
+## 6. Contextual Activity & Modal Gating
 
-The MFD engine automatically injects a dynamic `SETTINGS` tab as the last tab of every MFD.
+The `ContextEvaluator` subsystem samples `%USERPROFILE%\Saved Games\Frontier Developments\Elite Dangerous\Status.json` off the render thread:
 
-- **Dynamic Defaults**: Initial values for coordinates, rotation angles, scale, opacity, tracking mode, and themes are seeded from the display's JSON file.
-- **Pilot Customization**: Pilots can fine-tune Position X/Y/Z, Pitch, Yaw, Scale, Glass Opacity, Gaze Dwell Delays, Focus Margin, and Custom RGBA vector wireframe colors directly in VR using their HOTAS hat switch or keyboard arrows.
-- **Persistence & Fallback**: Any user adjustment is written to `<game_dir>\plugins\edvr_mfd\edvr_mfd.ini` (with mirror to `%LOCALAPPDATA%\EDVR\edvr_mfd.ini`). On reload, user overrides take precedence over the JSON defaults.
-- **Reset to Defaults**: The `[RESTORE DEFAULTS]` option allows pilots to revert individual MFDs back to the author's JSON specifications at any time.
+### GuiFocus Modal Suppression
+Whenever the pilot accesses modal game interfaces, MFD rendering is automatically suppressed:
+- `GuiFocus == 6`: Galaxy Map
+- `GuiFocus == 7`: System Map
+- `GuiFocus == 8`: Orrery
+- `GuiFocus == 9`: FSS (Full Spectrum System Scanner)
+- `GuiFocus == 10`: SAA (Surface Analysis Area)
+- `GuiFocus == 11`: Codex
+
+### Vehicle Context Identifiers
+Screens declare applicable environments in their `contexts` list:
+- `ship_cockpit`: Piloting a primary starship.
+- `srv`: Driving a Surface Recon Vehicle.
+- `fighter`: Piloting a Ship-Launched Fighter.
+- `on_foot`: On-foot Odyssey exploration.
+- `taxi`: Apex Interstellar or shuttle transport.
+- `multicrew`: Acting as multicrew crew member.
+- `docked`: Docked at station or outpost.
+- `landed`: Landed on planetary surface.
+- `supercruise`: Traveling in supercruise.
+- `normal_space`: In normal space flight.
+- `hardpoints`: Combat hardpoints deployed.
+- `combat_mode`: Combat HUD active (orange reticle).
+- `analysis_mode`: Analysis HUD active (blue scanner reticle).
 
 ---
 
-## 7. External Tool Integration & Polling Protocol
+## 7. F8 In-Headset Menu & Settings
 
-1. **Atomic File Writes**:
-   - External tools should write changes to `<file>.tmp` and perform an atomic `rename` / `replace` to prevent partial-read parse errors.
-   - If the MFD engine encounters a partial JSON read during a file write, it retains the previous frame's valid view-model and retries on the next poll cycle without dropping frames or flashing.
-2. **Low-Overhead Polling**:
-   - The MFD engine inspects file modification timestamps (`GetFileAttributesEx`) at a throttled rate of 4–10 Hz (every 100–250 ms), keeping CPU and disk I/O overhead near 0.0%.
+The MFD addon integrates directly into the EDVR F8 in-headset menu under **Cockpit MFD**:
+
+- **Hide All (`mfd_hide_all_toggle`)**: Master instant visibility toggle. When enabled, immediately clears all MFD panels across all cockpits (ideal for pause menus, external camera, or cinematic immersion).
+- **Cockpit MFD Displays (`On` / `Off`)**: Master plugin toggle enabling or disabling MFD rendering entirely.
+- **Show all windows (`On` / `Off`)**: Bypasses gaze cone fading, ensuring all active displays remain 100% opaque.
+- **Active displays (`1 (Center)`, `2 (Center + Left)`, `3 (All Three)`)**: Slot count selector.
+- **Head-locked HUD (`On` / `Off`)**: Toggles between cockpit 3D projective quad anchors and head-relative HUD tracking.
+- **Per-Package Toggles**: Allows enabling or disabling individual packages independently at runtime.

@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dmnemec.github.io/edvr-mfd/schema/display.v1.schema.json",
+  "title": "EDVR MFD Display Schema v1",
+  "description": "JSON schema for edvr-mfd screen display files (§5.3)",
+  "type": "object",
+  "required": ["schemaVersion", "title", "tabs"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version (must be 1)"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Display top header title"
+    },
+    "subtitle": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Display header subtitle"
+    },
+    "statusBadge": {
+      "description": "Upper-right status badge tag or object",
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 128
+        },
+        {
+          "type": "object",
+          "required": ["text"],
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "color": {
+              "$ref": "#/$defs/NamedColor"
+            }
+          }
+        }
+      ]
+    },
+    "footerHint": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Navigation/action hint shown in bottom footer bar"
+    },
+    "paginationText": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "tabs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "description": "Display tabs array (<= 16 tabs)",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "not": {
+              "const": "__settings"
+            },
+            "description": "Unique tab ID (forbidden: '__settings')"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Tab header title"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["list", "keyvalue", "text", "bars"],
+            "description": "Tab layout type"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 256,
+            "description": "Tab items (<= 256 items)",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ListItem"
+                },
+                {
+                  "$ref": "#/$defs/KeyValueItem"
+                },
+                {
+                  "$ref": "#/$defs/BarItem"
+                }
+              ]
+            }
+          },
+          "keyvalues": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/$defs/KeyValueItem"
+            }
+          },
+          "bars": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/$defs/BarItem"
+            }
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Multi-line text content for text tabs"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "NamedColor": {
+      "type": "string",
+      "enum": ["normal", "dim", "accent", "ok", "warn", "crit"],
+      "description": "Named theme palette color"
+    },
+    "IconGlyph": {
+      "type": "string",
+      "enum": [
+        "fuel",
+        "warning",
+        "neutron",
+        "whitedwarf",
+        "bio",
+        "geo",
+        "check",
+        "lock",
+        "star"
+      ],
+      "description": "Fixed glyph set for icons"
+    },
+    "CheckState": {
+      "type": "string",
+      "enum": ["done", "todo", "na"],
+      "description": "Item check state"
+    },
+    "ItemAction": {
+      "type": "string",
+      "enum": ["event", "clipboard"],
+      "default": "event",
+      "description": "Triggered action on item selection"
+    },
+    "Check": {
+      "type": "object",
+      "required": ["label", "state"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2,
+          "description": "1-2 character checklist label"
+        },
+        "state": {
+          "$ref": "#/$defs/CheckState"
+        }
+      }
+    },
+    "ListItem": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Unique item ID within tab"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "sublabel": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "badge": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "valueColor": {
+          "$ref": "#/$defs/NamedColor"
+        },
+        "icon": {
+          "$ref": "#/$defs/IconGlyph"
+        },
+        "checks": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/Check"
+          }
+        },
+        "action": {
+          "$ref": "#/$defs/ItemAction"
+        }
+      }
+    },
+    "KeyValueItem": {
+      "type": "object",
+      "required": ["id", "key", "value"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Unique item ID within tab"
+        },
+        "key": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "valueColor": {
+          "$ref": "#/$defs/NamedColor"
+        },
+        "action": {
+          "$ref": "#/$defs/ItemAction"
+        }
+      }
+    },
+    "BarItem": {
+      "type": "object",
+      "required": ["id", "label", "value", "max"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Unique bar ID within tab"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "value": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "segments": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "color": {
+          "$ref": "#/$defs/NamedColor"
+        }
+      }
+    }
+  }
+}

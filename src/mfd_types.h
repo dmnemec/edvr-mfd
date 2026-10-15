@@ -130,18 +130,18 @@ enum class MfdCompositorBackend : uint8_t {
     kD3D11SceneMesh  = 1   // Option B: Reserved slot for D3D11 scene draw injection
 };
 
-// Bitmask for contextual activity gating (Status.json Flags bit checking)
-enum MfdActivityMask : uint32_t {
+// Deprecated bitmask for legacy activity gating. Replaced by ContextEvaluator (§7).
+enum [[deprecated("Use ContextEvaluator and GameContext (§7)")]] MfdActivityMask : uint32_t {
     kActivityAlways       = 0,
-    kActivityShip         = 1 << 0,  // Active in Ship (Flags bit 27)
-    kActivitySrv          = 1 << 1,  // Active in SRV (Flags bit 26)
-    kActivityFighter      = 1 << 2,  // Active in SLF Fighter (Flags bit 28)
-    kActivityOnFoot       = 1 << 3,  // Active On Foot
+    kActivityShip         = 1 << 0,  // Active in Ship (Status.json Flags bit 24)
+    kActivitySrv          = 1 << 1,  // Active in SRV (Status.json Flags bit 26)
+    kActivityFighter      = 1 << 2,  // Active in SLF Fighter (Status.json Flags bit 25)
+    kActivityOnFoot       = 1 << 3,  // Active On Foot (Status.json Flags2 bit 0)
     kActivityInFlight     = 1 << 4,  // Active only in Flight (not docked or landed)
-    kActivityDocked       = 1 << 5,  // Active when docked (Flags bit 0)
-    kActivityHardpoints   = 1 << 6,  // Active when hardpoints deployed (Flags bit 6)
-    kActivityCombat       = 1 << 7,  // Active in Combat Mode (Flags bit 27 == 0)
-    kActivityAnalysis     = 1 << 8,  // Active in Analysis Mode (Flags bit 27 == 1 / 0x08000000)
+    kActivityDocked       = 1 << 5,  // Active when docked (Status.json Flags bit 0)
+    kActivityHardpoints   = 1 << 6,  // Active when hardpoints deployed (Status.json Flags bit 6)
+    kActivityCombat       = 1 << 7,  // Active in Combat Mode (in ship && Flags bit 27 == 0)
+    kActivityAnalysis     = 1 << 8,  // Active in Analysis Mode (Status.json Flags bit 27 == 1)
 };
 
 // Color theme presets

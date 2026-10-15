@@ -34,12 +34,15 @@ call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul
 :compiler_found
 if not exist "build\plugins\edvr_mfd" mkdir "build\plugins\edvr_mfd"
 if not exist "build\plugins\edvr_mfd\displays" mkdir "build\plugins\edvr_mfd\displays"
+if not exist "build\plugins\edvr_mfd\mfds" mkdir "build\plugins\edvr_mfd\mfds"
+xcopy /E /I /Q /Y /D "packages" "build\plugins\edvr_mfd\mfds" >nul 2>&1
 if not exist "build\obj" mkdir "build\obj"
+if not exist "build\obj_test" mkdir "build\obj_test"
 
-set CXXFLAGS=/std:c++17 /O2 /Zi /W4 /WX- /EHsc /MT /Fo:build\obj\ /Fd:build\plugins\edvr_mfd\plugin.pdb /Iinclude /Isrc /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /DEDVR_PLUGIN_EXPORTS
+set CXXFLAGS=/std:c++17 /O2 /Z7 /W4 /WX- /EHsc /MT /Fo:build\obj\ /Iinclude /Isrc /Ithird_party /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /DEDVR_PLUGIN_EXPORTS
 set LDFLAGS=/DLL /DEBUG /MAP:build\plugins\edvr_mfd\plugin.map /OUT:build\plugins\edvr_mfd\plugin.dll /IMPLIB:build\plugins\edvr_mfd\plugin.lib d3d11.lib dxgi.lib d3dcompiler.lib user32.lib shell32.lib ole32.lib winmm.lib
 
-cl %CXXFLAGS% src\mfd_plugin.cpp src\mfd_manager.cpp src\mfd_renderer.cpp src\mfd_gaze_tracker.cpp src\mfd_input_router.cpp src\mfd_provider.cpp src\mfd_font.cpp /link %LDFLAGS%
+cl %CXXFLAGS% src\mfd_plugin.cpp src\mfd_manager.cpp src\mfd_renderer.cpp src\mfd_gaze_tracker.cpp src\mfd_input_router.cpp src\mfd_provider.cpp src\mfd_font.cpp src\mfd_display_schema.cpp src\mfd_package.cpp src\mfd_content_watcher.cpp src\mfd_context.cpp src\mfd_event_log.cpp src\mfd_companion.cpp /link %LDFLAGS%
 
 if %errorlevel% neq 0 (
     echo [edvr-mfd] ERROR: Build failed.
@@ -49,9 +52,9 @@ if %errorlevel% neq 0 (
 echo [edvr-mfd] SUCCESS: build\plugins\edvr_mfd\plugin.dll created.
 
 echo [edvr-mfd] Building and running unit tests...
-set TEST_CXXFLAGS=/std:c++17 /O2 /EHsc /MT /Fo:build\obj\ /Iinclude /Isrc /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /DEDVR_PLUGIN_EXPORTS
+set TEST_CXXFLAGS=/std:c++17 /O2 /EHsc /MT /Fo:build\obj_test\ /Iinclude /Isrc /Ithird_party /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /DEDVR_PLUGIN_EXPORTS
 set TEST_LDFLAGS=d3d11.lib dxgi.lib d3dcompiler.lib user32.lib shell32.lib ole32.lib winmm.lib
-cl %TEST_CXXFLAGS% tools\mfd_test\mfd_test.cpp src\mfd_plugin.cpp src\mfd_manager.cpp src\mfd_renderer.cpp src\mfd_gaze_tracker.cpp src\mfd_input_router.cpp src\mfd_provider.cpp src\mfd_font.cpp /link %TEST_LDFLAGS% /OUT:build\mfd_test.exe
+cl %TEST_CXXFLAGS% tools\mfd_test\mfd_test.cpp src\mfd_plugin.cpp src\mfd_manager.cpp src\mfd_renderer.cpp src\mfd_gaze_tracker.cpp src\mfd_input_router.cpp src\mfd_provider.cpp src\mfd_font.cpp src\mfd_display_schema.cpp src\mfd_package.cpp src\mfd_content_watcher.cpp src\mfd_context.cpp src\mfd_event_log.cpp src\mfd_companion.cpp /link %TEST_LDFLAGS% /OUT:build\mfd_test.exe
 if %errorlevel% neq 0 (
     echo [edvr-mfd] ERROR: Test compilation failed.
     exit /b 1
@@ -60,6 +63,13 @@ if %errorlevel% neq 0 (
 build\mfd_test.exe
 if %errorlevel% neq 0 (
     echo [edvr-mfd] ERROR: Unit tests failed.
+    exit /b 1
+)
+
+echo [edvr-mfd] Running companion Go unit tests...
+wsl -- bash -lc "cd /mnt/c/Users/csasn/github.com/dmnemec/edvr-mfd/companion && /usr/local/go/bin/go test ./..."
+if %errorlevel% neq 0 (
+    echo [edvr-mfd] ERROR: Companion Go unit tests failed.
     exit /b 1
 )
 

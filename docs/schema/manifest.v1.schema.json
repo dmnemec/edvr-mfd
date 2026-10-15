@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dmnemec.github.io/edvr-mfd/schema/manifest.v1.schema.json",
+  "title": "EDVR MFD Package Manifest Schema v1",
+  "description": "JSON schema for edvr-mfd package manifest.json files (§4.2)",
+  "type": "object",
+  "required": ["manifestVersion", "id", "name", "screens"],
+  "properties": {
+    "manifestVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Major manifest version (must be 1)"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{1,31}$",
+      "description": "Unique package identifier matching package directory name"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable package name"
+    },
+    "version": {
+      "type": "string",
+      "description": "SemVer package version string"
+    },
+    "author": {
+      "type": "string",
+      "description": "Package author or team"
+    },
+    "description": {
+      "type": "string",
+      "description": "Package description"
+    },
+    "minPluginVersion": {
+      "type": "string",
+      "description": "Minimum required plugin version"
+    },
+    "screens": {
+      "type": "array",
+      "description": "Screens declared by this package",
+      "items": {
+        "type": "object",
+        "required": ["id", "file", "title"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique screen ID within package"
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Relative path to display JSON file within package"
+          },
+          "title": {
+            "type": "string",
+            "description": "Screen title displayed in F8 settings menu"
+          },
+          "pose": {
+            "type": "object",
+            "description": "Default 3D placement in cockpit space",
+            "required": ["position", "pitchDeg", "yawDeg", "widthM", "heightM"],
+            "properties": {
+              "position": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "[x, y, z] in cockpit meters"
+              },
+              "pitchDeg": { "type": "number" },
+              "yawDeg": { "type": "number" },
+              "rollDeg": { "type": "number" },
+              "widthM": { "type": "number", "exclusiveMinimum": 0 },
+              "heightM": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          },
+          "contexts": {
+            "type": "array",
+            "description": "Cockpit/game contexts where this screen is visible",
+            "items": {
+              "type": "string",
+              "enum": [
+                "main_menu",
+                "ship_cockpit",
+                "fighter",
+                "srv",
+                "on_foot",
+                "taxi",
+                "multicrew",
+                "docked",
+                "landed",
+                "supercruise",
+                "normal_space",
+                "hardpoints",
+                "analysis_mode",
+                "combat_mode",
+                "galaxy_map",
+                "system_map",
+                "station_services"
+              ]
+            }
+          },
+          "excludeContexts": {
+            "type": "array",
+            "description": "Explicit context exclusions",
+            "items": {
+              "type": "string",
+              "enum": [
+                "main_menu",
+                "ship_cockpit",
+                "fighter",
+                "srv",
+                "on_foot",
+                "taxi",
+                "multicrew",
+                "docked",
+                "landed",
+                "supercruise",
+                "normal_space",
+                "hardpoints",
+                "analysis_mode",
+                "combat_mode",
+                "galaxy_map",
+                "system_map",
+                "station_services"
+              ]
+            }
+          },
+          "autoHideUntilGaze": {
+            "type": "boolean",
+            "description": "When true, fade display until gaze focuses on it"
+          }
+        }
+      }
+    },
+    "companions": {
+      "type": "array",
+      "description": "Companion background executables managed by supervisor",
+      "items": {
+        "type": "object",
+        "required": ["id", "exe"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Companion identifier"
+          },
+          "exe": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Executable path inside package or absolute path"
+          },
+          "args": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Arguments passed to companion executable"
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Environment variables"
+          },
+          "restart": {
+            "type": "string",
+            "enum": ["never", "always", "on-failure"],
+            "default": "on-failure",
+            "description": "Supervisor restart policy"
+          }
+        }
+      }
+    }
+  }
+}
