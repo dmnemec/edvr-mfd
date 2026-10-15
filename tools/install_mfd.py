@@ -158,6 +158,23 @@ def install_mfd(repo_root, game_dir, dry_run=False, verify_only=False, force=Fal
                 else:
                     os.makedirs(dst_pkg_dir, exist_ok=True)
                     shutil.copytree(pkg_src_dir, dst_pkg_dir, dirs_exist_ok=True)
+                    # Clean up obsolete screen files consolidated in MFD-008
+                    if pkg_id == "ship":
+                        for old_f in ["modules.json", "power.json", "cargo.json"]:
+                            old_p = os.path.join(dst_pkg_dir, "screens", old_f)
+                            if os.path.isfile(old_p):
+                                try:
+                                    os.remove(old_p)
+                                except OSError:
+                                    pass
+                    elif pkg_id == "exploration":
+                        for old_f in ["system.json", "bio.json"]:
+                            old_p = os.path.join(dst_pkg_dir, "screens", old_f)
+                            if os.path.isfile(old_p):
+                                try:
+                                    os.remove(old_p)
+                                except OSError:
+                                    pass
                     print(f"[edvr-mfd] INSTALLED: package '{pkg_id}' (v{repo_ver_str}) -> {dst_pkg_dir}")
 
     # Stage display templates if available (backward compatibility)
@@ -199,8 +216,8 @@ def self_test():
         os.makedirs(os.path.join(pkg1_dir, "bin"), exist_ok=True)
         with open(os.path.join(pkg1_dir, "manifest.json"), "w", encoding="utf-8") as f:
             json.dump({"manifestVersion": 1, "id": "ship", "version": "1.0.0"}, f)
-        with open(os.path.join(pkg1_dir, "screens", "modules.json"), "w", encoding="utf-8") as f:
-            f.write('{"title": "MODULES"}')
+        with open(os.path.join(pkg1_dir, "screens", "ship.json"), "w", encoding="utf-8") as f:
+            f.write('{"title": "SHIP READOUT"}')
         with open(os.path.join(pkg1_dir, "bin", "edvr-mfd-ship.exe"), "wb") as f:
             f.write(b"SHIP_EXE_BIN")
 
@@ -219,7 +236,7 @@ def self_test():
             assert f.read() == b"EDVR_MFD_PLUGIN_TEST_BYTES"
 
         installed_manifest = os.path.join(game_dir, "plugins", "edvr_mfd", "mfds", "ship", "manifest.json")
-        installed_screen = os.path.join(game_dir, "plugins", "edvr_mfd", "mfds", "ship", "screens", "modules.json")
+        installed_screen = os.path.join(game_dir, "plugins", "edvr_mfd", "mfds", "ship", "screens", "ship.json")
         installed_bin = os.path.join(game_dir, "plugins", "edvr_mfd", "mfds", "ship", "bin", "edvr-mfd-ship.exe")
         assert os.path.isfile(installed_manifest)
         assert os.path.isfile(installed_screen)
@@ -258,7 +275,7 @@ def self_test():
         res = install_mfd(repo_root, game_dir, dry_run=False, force=True)
         assert res == 0
         with open(installed_screen, "r", encoding="utf-8") as f:
-            assert f.read() == '{"title": "MODULES"}'
+            assert f.read() == '{"title": "SHIP READOUT"}'
         assert os.path.isfile(runtime_log)
 
         # 9. Extra user-imported packages preservation

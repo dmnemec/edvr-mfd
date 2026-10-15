@@ -34,8 +34,9 @@ call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul
 :compiler_found
 if not exist "build\plugins\edvr_mfd" mkdir "build\plugins\edvr_mfd"
 if not exist "build\plugins\edvr_mfd\displays" mkdir "build\plugins\edvr_mfd\displays"
-if not exist "build\plugins\edvr_mfd\mfds" mkdir "build\plugins\edvr_mfd\mfds"
-xcopy /E /I /Q /Y /D "packages" "build\plugins\edvr_mfd\mfds" >nul 2>&1
+if exist "build\plugins\edvr_mfd\mfds" rmdir /s /q "build\plugins\edvr_mfd\mfds"
+mkdir "build\plugins\edvr_mfd\mfds"
+xcopy /E /I /Q /Y "packages" "build\plugins\edvr_mfd\mfds" >nul 2>&1
 if not exist "build\obj" mkdir "build\obj"
 if not exist "build\obj_test" mkdir "build\obj_test"
 

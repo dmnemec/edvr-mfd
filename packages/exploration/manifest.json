@@ -9,22 +9,16 @@
   "minPluginVersion": "1.0.0",
   "screens": [
     {
-      "id": "system",
-      "file": "screens/system.json",
-      "title": "SYSTEM",
-      "contexts": [
-        "ship_cockpit",
-        "fighter",
-        "srv",
-        "on_foot",
-        "taxi",
-        "multicrew"
-      ]
-    },
-    {
-      "id": "bio",
-      "file": "screens/bio.json",
-      "title": "BIO",
+      "id": "exploration",
+      "file": "screens/exploration.json",
+      "title": "EXPLORATION",
+      "pose": {
+        "position": [0.28, -0.22, 0.55],
+        "pitchDeg": -22.0,
+        "yawDeg": -32.0,
+        "widthM": 0.24,
+        "heightM": 0.16
+      },
       "contexts": [
         "ship_cockpit",
         "fighter",

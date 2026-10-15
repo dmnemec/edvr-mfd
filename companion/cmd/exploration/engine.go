@@ -38,16 +38,13 @@ func (e *Engine) State() *SystemState {
 	return e.state
 }
 
-// FlushScreens forces an immediate regeneration and write of both SYSTEM and BIO screens.
+// FlushScreens forces an immediate regeneration and write of the consolidated EXPLORATION screen.
 func (e *Engine) FlushScreens() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	sysDisp := e.state.BuildSystemDisplay()
-	bioDisp := e.state.BuildBioDisplay()
-
-	_ = e.writer.Queue(e.cfg.SystemScreenFile, sysDisp)
-	_ = e.writer.Queue(e.cfg.BioScreenFile, bioDisp)
+	expDisp := e.state.BuildExplorationDisplay()
+	_ = e.writer.Queue(e.cfg.ExplorationScreenFile, expDisp)
 
 	return e.writer.Flush()
 }
@@ -92,11 +89,8 @@ func (e *Engine) Run(ctx context.Context) error {
 				return nil
 			}
 			sysChanged, bioChanged := e.state.HandleJournalEntry(entry)
-			if sysChanged {
-				_ = e.writer.Queue(e.cfg.SystemScreenFile, e.state.BuildSystemDisplay())
-			}
-			if bioChanged {
-				_ = e.writer.Queue(e.cfg.BioScreenFile, e.state.BuildBioDisplay())
+			if sysChanged || bioChanged {
+				_ = e.writer.Queue(e.cfg.ExplorationScreenFile, e.state.BuildExplorationDisplay())
 			}
 
 		// Status.json stream
@@ -105,11 +99,8 @@ func (e *Engine) Run(ctx context.Context) error {
 				continue
 			}
 			sysChanged, bioChanged := e.state.HandleStatus(snap)
-			if sysChanged {
-				_ = e.writer.Queue(e.cfg.SystemScreenFile, e.state.BuildSystemDisplay())
-			}
-			if bioChanged {
-				_ = e.writer.Queue(e.cfg.BioScreenFile, e.state.BuildBioDisplay())
+			if sysChanged || bioChanged {
+				_ = e.writer.Queue(e.cfg.ExplorationScreenFile, e.state.BuildExplorationDisplay())
 			}
 
 		// MFD UI interaction events
@@ -118,11 +109,8 @@ func (e *Engine) Run(ctx context.Context) error {
 				continue
 			}
 			sysChanged, bioChanged := e.state.HandleEvent(ev)
-			if sysChanged {
-				_ = e.writer.Queue(e.cfg.SystemScreenFile, e.state.BuildSystemDisplay())
-			}
-			if bioChanged {
-				_ = e.writer.Queue(e.cfg.BioScreenFile, e.state.BuildBioDisplay())
+			if sysChanged || bioChanged {
+				_ = e.writer.Queue(e.cfg.ExplorationScreenFile, e.state.BuildExplorationDisplay())
 			}
 		}
 	}

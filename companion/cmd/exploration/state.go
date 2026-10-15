@@ -651,6 +651,252 @@ func (s *SystemState) HandleEvent(ev events.Event) (systemChanged bool, bioChang
 	return false, false
 }
 
+// BuildExplorationDisplay generates the consolidated display model for screens/exploration.json (Ticket MFD-008).
+// Consolidates System (bodies list) and Bio (exobiology survey).
+func (s *SystemState) BuildExplorationDisplay() *display.Display {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sysName := s.StarSystem
+	if sysName == "" {
+		sysName = "WAITING FOR SCAN"
+	}
+
+	badge := &display.StatusBadge{
+		Text:  "WAITING FOR SCAN",
+		Color: display.PaletteDim,
+	}
+	if s.StarSystem != "" {
+		if s.InProgressSpecies != "" {
+			badge = &display.StatusBadge{Text: "SAMPLING", Color: display.PaletteAccent}
+		} else if s.AllBodiesFound {
+			badge = &display.StatusBadge{Text: "SURVEY COMPLETE", Color: display.PaletteOK}
+		} else if len(s.Bodies) > 0 {
+			badge = &display.StatusBadge{Text: "SURVEYING", Color: display.PaletteOK}
+		} else {
+			badge = &display.StatusBadge{Text: "DISCOVERED", Color: display.PaletteAccent}
+		}
+	}
+
+	// 1. System Tab (list of celestial bodies)
+	bodyList := make([]*BodyState, 0, len(s.Bodies))
+	for _, b := range s.Bodies {
+		bodyList = append(bodyList, b)
+	}
+
+	sort.Slice(bodyList, func(i, j int) bool {
+		valI := CalculateBodyValue(bodyList[i].PlanetClass, bodyList[i].StarType, bodyList[i].TerraformState, bodyList[i].MassEM, bodyList[i].WasDiscovered, bodyList[i].WasMapped, bodyList[i].MappedByPilot)
+		valJ := CalculateBodyValue(bodyList[j].PlanetClass, bodyList[j].StarType, bodyList[j].TerraformState, bodyList[j].MassEM, bodyList[j].WasDiscovered, bodyList[j].WasMapped, bodyList[j].MappedByPilot)
+		if valI != valJ {
+			return valI > valJ
+		}
+		return bodyList[i].DistanceFromArrivalLS < bodyList[j].DistanceFromArrivalLS
+	})
+
+	bodyItems := make([]display.Item, 0, len(bodyList)+1)
+	for _, b := range bodyList {
+		val := CalculateBodyValue(b.PlanetClass, b.StarType, b.TerraformState, b.MassEM, b.WasDiscovered, b.WasMapped, b.MappedByPilot)
+		shortName := shortBodyName(s.StarSystem, b.BodyName)
+
+		var typeDesc string
+		if b.PlanetClass != "" {
+			typeDesc = b.PlanetClass
+		} else if b.StarType != "" {
+			typeDesc = fmt.Sprintf("Class %s Star", b.StarType)
+		} else {
+			typeDesc = "Unclassified"
+		}
+
+		var tags []string
+		tags = append(tags, fmt.Sprintf("%.0f ls", b.DistanceFromArrivalLS))
+		if b.Landable {
+			tags = append(tags, "LAND")
+		}
+		if strings.Contains(strings.ToLower(b.TerraformState), "terraform") {
+			tags = append(tags, "TERRA")
+		}
+		sublabel := fmt.Sprintf("%s • %s", typeDesc, strings.Join(tags, " • "))
+
+		sState := display.CheckStateTodo
+		if b.DetailedScan {
+			sState = display.CheckStateDone
+		}
+
+		mState := display.CheckStateTodo
+		if !isMappable(b.PlanetClass, b.StarType) {
+			mState = display.CheckStateNA
+		} else if b.MappedByPilot {
+			mState = display.CheckStateDone
+		}
+
+		bState := display.CheckStateNA
+		if b.BioSignalsCount > 0 {
+			analysedCount := 0
+			for _, org := range b.Organics {
+				if org.Stage == "Analyse" {
+					analysedCount++
+				}
+			}
+			if analysedCount >= b.BioSignalsCount && b.BioSignalsCount > 0 {
+				bState = display.CheckStateDone
+			} else {
+				bState = display.CheckStateTodo
+			}
+		}
+
+		gState := display.CheckStateNA
+		if b.GeoSignalsCount > 0 {
+			gState = display.CheckStateDone
+		}
+
+		checks := []display.Check{
+			{Label: "S", State: sState},
+			{Label: "M", State: mState},
+			{Label: "B", State: bState},
+			{Label: "G", State: gState},
+		}
+
+		icon := ""
+		if b.BioSignalsCount > 0 {
+			icon = display.IconBio
+		} else if b.GeoSignalsCount > 0 {
+			icon = display.IconGeo
+		} else if b.StarType != "" {
+			icon = display.IconStar
+		}
+
+		bodyItems = append(bodyItems, display.Item{
+			ID:         fmt.Sprintf("body_%d", b.BodyID),
+			Label:      shortName,
+			Sublabel:   sublabel,
+			Value:      fmt.Sprintf("%s CR", formatCredits(val)),
+			ValueColor: display.PaletteOK,
+			Icon:       icon,
+			Checks:     checks,
+			Action:     display.ActionDefault,
+		})
+	}
+
+	if s.BodyCount > len(bodyList) {
+		gap := s.BodyCount - len(bodyList)
+		bodyItems = append(bodyItems, display.Item{
+			ID:         "unscanned_gap",
+			Label:      fmt.Sprintf("? Unscanned bodies: %d", gap),
+			Sublabel:   "Use FSS Discovery Scanner",
+			Value:      "—",
+			ValueColor: display.PaletteDim,
+			Checks: []display.Check{
+				{Label: "S", State: display.CheckStateTodo},
+			},
+		})
+	}
+
+	if len(bodyItems) == 0 {
+		bodyItems = append(bodyItems, display.Item{
+			ID:         "placeholder_bodies",
+			Label:      "No bodies scanned",
+			Sublabel:   "Honk system to begin survey",
+			Value:      "—",
+			ValueColor: display.PaletteDim,
+		})
+	}
+
+	systemTab := display.Tab{
+		ID:    "system",
+		Title: "SYSTEM",
+		Type:  display.TabTypeList,
+		Items: bodyItems,
+	}
+
+	// 2. Bio Tab (list of biological survey bodies)
+	var bioBodies []*BodyState
+	for _, b := range s.Bodies {
+		if b.BioSignalsCount > 0 || len(b.Genuses) > 0 || len(b.Organics) > 0 {
+			bioBodies = append(bioBodies, b)
+		}
+	}
+
+	sort.Slice(bioBodies, func(i, j int) bool {
+		return bioBodies[i].DistanceFromArrivalLS < bioBodies[j].DistanceFromArrivalLS
+	})
+
+	bioBodyItems := make([]display.Item, 0, len(bioBodies))
+	for _, b := range bioBodies {
+		analysed := 0
+		var bodyBioValue int64
+		mult := int64(1)
+		if !b.WasFootfalled {
+			mult = 5
+		}
+
+		for _, org := range b.Organics {
+			if org.Stage == "Analyse" {
+				analysed++
+			}
+			bodyBioValue += GetSpeciesBaseValue(org.Species) * mult
+		}
+
+		totalSigs := b.BioSignalsCount
+		if len(b.Genuses) > totalSigs {
+			totalSigs = len(b.Genuses)
+		}
+
+		bState := display.CheckStateTodo
+		if analysed >= totalSigs && totalSigs > 0 {
+			bState = display.CheckStateDone
+		}
+
+		valStr := "—"
+		if bodyBioValue > 0 {
+			valStr = fmt.Sprintf("%s CR", formatCredits(bodyBioValue))
+		}
+
+		bioBodyItems = append(bioBodyItems, display.Item{
+			ID:         fmt.Sprintf("bio_body_%d", b.BodyID),
+			Label:      shortBodyName(s.StarSystem, b.BodyName),
+			Sublabel:   fmt.Sprintf("%d/%d species analysed", analysed, totalSigs),
+			Value:      valStr,
+			ValueColor: display.PaletteOK,
+			Icon:       display.IconBio,
+			Checks: []display.Check{
+				{Label: "B", State: bState},
+			},
+			Action: display.ActionDefault,
+		})
+	}
+
+	if len(bioBodyItems) == 0 {
+		bioBodyItems = append(bioBodyItems, display.Item{
+			ID:         "no_bio_bodies",
+			Label:      "No biological signals detected",
+			Sublabel:   "Probe landable planets with DSS",
+			Value:      "—",
+			ValueColor: display.PaletteDim,
+		})
+	}
+
+	bioTab := display.Tab{
+		ID:    "bio",
+		Title: "BIO",
+		Type:  display.TabTypeList,
+		Items: bioBodyItems,
+	}
+
+	subtitle := sysName
+	if subtitle == "WAITING FOR SCAN" {
+		subtitle = "STANDBY"
+	}
+
+	return &display.Display{
+		SchemaVersion: display.CurrentSchemaVersion,
+		Title:         "EXPLORATION",
+		Subtitle:      subtitle,
+		StatusBadge:   badge,
+		FooterHint:    "UP/DOWN: SCROLL | LEFT/RIGHT: TAB",
+		Tabs:          []display.Tab{systemTab, bioTab},
+	}
+}
+
 // BuildSystemDisplay generates the display model for screens/system.json (Ticket C7).
 func (s *SystemState) BuildSystemDisplay() *display.Display {
 	s.mu.Lock()

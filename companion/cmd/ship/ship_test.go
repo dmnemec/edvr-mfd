@@ -15,9 +15,7 @@ import (
 
 func TestSeedFilesValidation(t *testing.T) {
 	seeds := []string{
-		filepath.Join("..", "..", "..", "packages", "ship", "screens", "modules.json"),
-		filepath.Join("..", "..", "..", "packages", "ship", "screens", "power.json"),
-		filepath.Join("..", "..", "..", "packages", "ship", "screens", "cargo.json"),
+		filepath.Join("..", "..", "..", "packages", "ship", "screens", "ship.json"),
 	}
 
 	for _, path := range seeds {
@@ -39,6 +37,13 @@ func TestSeedFilesValidation(t *testing.T) {
 			if d.StatusBadge == nil || d.StatusBadge.Text != "WAITING FOR DATA" {
 				t.Fatalf("expected status badge 'WAITING FOR DATA', got %+v", d.StatusBadge)
 			}
+
+			if len(d.Tabs) != 3 {
+				t.Fatalf("expected 3 consolidated tabs (integrity, power, cargo), got %d", len(d.Tabs))
+			}
+			if d.Tabs[0].ID != "integrity" || d.Tabs[1].ID != "power" || d.Tabs[2].ID != "cargo" {
+				t.Errorf("unexpected tab IDs: %s, %s, %s", d.Tabs[0].ID, d.Tabs[1].ID, d.Tabs[2].ID)
+			}
 		})
 	}
 
@@ -51,7 +56,16 @@ func TestSeedFilesValidation(t *testing.T) {
 	var manifest struct {
 		ID       string `json:"id"`
 		Name     string `json:"name"`
-		Screens  []any  `json:"screens"`
+		Screens  []struct {
+			ID    string `json:"id"`
+			File  string `json:"file"`
+			Title string `json:"title"`
+			Pose  *struct {
+				Position []float64 `json:"position"`
+				PitchDeg float64   `json:"pitchDeg"`
+				YawDeg   float64   `json:"yawDeg"`
+			} `json:"pose"`
+		} `json:"screens"`
 		Companions []struct {
 			ID  string `json:"id"`
 			Exe string `json:"exe"`
@@ -64,8 +78,22 @@ func TestSeedFilesValidation(t *testing.T) {
 	if manifest.ID != "ship" || manifest.Name != "Ship Readout" {
 		t.Errorf("unexpected manifest header: %+v", manifest)
 	}
-	if len(manifest.Screens) != 3 {
-		t.Errorf("expected 3 screens in manifest, got %d", len(manifest.Screens))
+	if len(manifest.Screens) != 1 {
+		t.Fatalf("expected exactly 1 screen in manifest, got %d", len(manifest.Screens))
+	}
+	scr := manifest.Screens[0]
+	if scr.ID != "ship" || scr.File != "screens/ship.json" || scr.Title != "SHIP READOUT" {
+		t.Errorf("unexpected screen declaration: %+v", scr)
+	}
+	if scr.Pose == nil || len(scr.Pose.Position) != 3 {
+		t.Fatalf("expected pose with 3 position coordinates, got %+v", scr.Pose)
+	}
+	// Left console pose: x=-0.28, y=-0.22, z=0.55, yaw=32, pitch=-22
+	if scr.Pose.Position[0] != -0.28 || scr.Pose.Position[1] != -0.22 || scr.Pose.Position[2] != 0.55 {
+		t.Errorf("unexpected pose position: %+v", scr.Pose.Position)
+	}
+	if scr.Pose.YawDeg != 32.0 || scr.Pose.PitchDeg != -22.0 {
+		t.Errorf("unexpected pose angles: yaw=%v, pitch=%v", scr.Pose.YawDeg, scr.Pose.PitchDeg)
 	}
 	if len(manifest.Companions) != 1 || manifest.Companions[0].ID != "ship-feed" {
 		t.Errorf("expected companion 'ship-feed', got %+v", manifest.Companions)
@@ -459,13 +487,95 @@ func TestCargoScreen_PriceCacheAndCalculations(t *testing.T) {
 	}
 }
 
+func TestShipScreen_ConsolidatedTabs(t *testing.T) {
+	st := NewShipState(nil)
+	st.Ship = "python"
+	st.HullHealth = 0.95
+	st.Pips = elite.Pips{4, 2, 6}
+	st.PowerPlantCapacity = 25.0
+	st.Modules = []ShipModule{
+		{Slot: "PowerPlant", Label: "Power Plant", Health: 1.0, On: true, PowerDraw: 0.0},
+		{Slot: "FSD", Label: "Frame Shift Drive", Health: 0.65, On: true, PowerDraw: 4.5},
+		{Slot: "Thrusters", Label: "Thrusters", Health: 0.35, On: true, PowerDraw: 6.0},
+	}
+	st.Cargo = &elite.CargoSnapshot{
+		CargoCapacity: 64,
+		Inventory: []elite.CargoItem{
+			{Name: "palladium", NameLocalised: "Palladium", Count: 12, Stolen: 0},
+			{Name: "gold", NameLocalised: "Gold", Count: 4, Stolen: 2},
+		},
+	}
+
+	disp := st.BuildShipDisplay()
+	if err := display.Validate(disp); err != nil {
+		t.Fatalf("BuildShipDisplay validation failed: %v", err)
+	}
+
+	if disp.Title != "SHIP READOUT" {
+		t.Errorf("expected Title 'SHIP READOUT', got %s", disp.Title)
+	}
+	if disp.Subtitle != "Python" {
+		t.Errorf("expected Subtitle 'Python', got %s", disp.Subtitle)
+	}
+	if disp.StatusBadge == nil || disp.StatusBadge.Text != "2 DAMAGED" {
+		t.Errorf("expected '2 DAMAGED' badge, got %+v", disp.StatusBadge)
+	}
+	if len(disp.Tabs) != 3 {
+		t.Fatalf("expected 3 tabs, got %d", len(disp.Tabs))
+	}
+
+	// Tab 1: Integrity (list)
+	integrityTab := disp.Tabs[0]
+	if integrityTab.ID != "integrity" || integrityTab.Type != display.TabTypeList {
+		t.Errorf("unexpected Tab 1: %+v", integrityTab)
+	}
+	// Thrusters (35%) should come before FSD (65%), and Power Plant (100%) last
+	if len(integrityTab.Items) != 3 {
+		t.Fatalf("expected 3 items in integrity tab, got %d", len(integrityTab.Items))
+	}
+	if integrityTab.Items[0].Label != "Thrusters" || integrityTab.Items[0].Value != "35%" {
+		t.Errorf("expected Thrusters 35%% first, got %+v", integrityTab.Items[0])
+	}
+	if integrityTab.Items[1].Label != "Frame Shift Drive" || integrityTab.Items[1].Value != "65%" {
+		t.Errorf("expected FSD 65%% second, got %+v", integrityTab.Items[1])
+	}
+
+	// Tab 2: Power (bars)
+	powerTab := disp.Tabs[1]
+	if powerTab.ID != "power" || powerTab.Type != display.TabTypeBars {
+		t.Errorf("unexpected Tab 2: %+v", powerTab)
+	}
+	if len(powerTab.Bars) < 4 {
+		t.Fatalf("expected at least 4 bars in power tab, got %d", len(powerTab.Bars))
+	}
+	if powerTab.Bars[0].ID != "sys" || powerTab.Bars[0].Value != 4 {
+		t.Errorf("unexpected sys bar: %+v", powerTab.Bars[0])
+	}
+
+	// Tab 3: Cargo (list)
+	cargoTab := disp.Tabs[2]
+	if cargoTab.ID != "cargo" || cargoTab.Type != display.TabTypeList {
+		t.Errorf("unexpected Tab 3: %+v", cargoTab)
+	}
+	if len(cargoTab.Items) != 2 {
+		t.Fatalf("expected 2 items in cargo tab, got %d", len(cargoTab.Items))
+	}
+	if cargoTab.Items[0].Label != "Palladium" || cargoTab.Items[0].Sublabel != "12 T" {
+		t.Errorf("unexpected cargo item 0: %+v", cargoTab.Items[0])
+	}
+	if cargoTab.Items[1].Label != "Gold" || cargoTab.Items[1].Sublabel != "4 T (2 Stolen)" {
+		t.Errorf("unexpected cargo item 1: %+v", cargoTab.Items[1])
+	}
+	if cargoTab.Items[1].Icon != display.IconLock {
+		t.Errorf("expected lock icon on stolen cargo, got %s", cargoTab.Items[1].Icon)
+	}
+}
+
 func TestEngine_EndToEndPipeline(t *testing.T) {
 	tempPkgDir := t.TempDir()
 	tempJournalDir := t.TempDir()
 
-	modulesDest := filepath.Join(tempPkgDir, "screens", "modules.json")
-	powerDest := filepath.Join(tempPkgDir, "screens", "power.json")
-	cargoDest := filepath.Join(tempPkgDir, "screens", "cargo.json")
+	shipDest := filepath.Join(tempPkgDir, "screens", "ship.json")
 
 	cfg := Config{
 		PackageDir:     tempPkgDir,
@@ -473,9 +583,7 @@ func TestEngine_EndToEndPipeline(t *testing.T) {
 		PriceCachePath: filepath.Join(tempPkgDir, "prices.json"),
 		CoalesceRate:   20 * time.Millisecond,
 		PollInterval:   10 * time.Millisecond,
-		ModulesFile:    modulesDest,
-		PowerFile:      powerDest,
-		CargoFile:      cargoDest,
+		ShipFile:       shipDest,
 	}
 
 	cw := writer.NewCoalescedWriter(writer.WithInterval(cfg.CoalesceRate))
@@ -510,13 +618,10 @@ func TestEngine_EndToEndPipeline(t *testing.T) {
 		errCh <- eng.Run(ctx)
 	}()
 
-	// Wait for screens to be written to disk
+	// Wait for screen to be written to disk
 	deadline := time.Now().Add(1500 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		_, errM := os.Stat(modulesDest)
-		_, errP := os.Stat(powerDest)
-		_, errC := os.Stat(cargoDest)
-		if errM == nil && errP == nil && errC == nil {
+		if _, errS := os.Stat(shipDest); errS == nil {
 			break
 		}
 		time.Sleep(25 * time.Millisecond)
@@ -525,18 +630,19 @@ func TestEngine_EndToEndPipeline(t *testing.T) {
 	cancel()
 	_ = <-errCh
 
-	// Validate written files
-	for _, screenPath := range []string{modulesDest, powerDest, cargoDest} {
-		data, err := os.ReadFile(screenPath)
-		if err != nil {
-			t.Fatalf("screen file %s not written: %v", screenPath, err)
-		}
-		var d display.Display
-		if err := json.Unmarshal(data, &d); err != nil {
-			t.Fatalf("invalid JSON in %s: %v", screenPath, err)
-		}
-		if err := display.Validate(&d); err != nil {
-			t.Fatalf("display validation failed for %s: %v", screenPath, err)
-		}
+	// Validate written file
+	data, err := os.ReadFile(shipDest)
+	if err != nil {
+		t.Fatalf("screen file %s not written: %v", shipDest, err)
+	}
+	var d display.Display
+	if err := json.Unmarshal(data, &d); err != nil {
+		t.Fatalf("invalid JSON in %s: %v", shipDest, err)
+	}
+	if err := display.Validate(&d); err != nil {
+		t.Fatalf("display validation failed for %s: %v", shipDest, err)
+	}
+	if len(d.Tabs) != 3 {
+		t.Errorf("expected 3 tabs in ship.json, got %d", len(d.Tabs))
 	}
 }

@@ -2,11 +2,12 @@
 
 ## Status
 - **Active Open Issues**: 0
-- **Resolved Issues**: 9
+- **Resolved Issues**: 10
 - **Last Updated**: 2026-10-15
 - **Jump to Section**:
   - [Open Issues](#open-issues)
   - [Resolved Issues](#resolved)
+    - [MFD-008: Multi-screen packages render as separate 3D quads instead of consolidated multi-tab displays](#mfd-008--multi-screen-packages-render-as-separate-3d-quads-instead-of-consolidated-multi-tab-displays)
     - [MFD-001: Directional HAT switch repeat press input suppression bleeding through to ship power pips](#mfd-001--directional-hat-switch-repeat-press-input-suppression-bleeding-through-to-ship-power-pips)
     - [MFD-002: Joystick/vJoy input not suppressed while MFD has focus](#mfd-002--joystickvjoy-input-not-suppressed-while-mfd-has-focus)
     - [MFD-003: Cockpit MFD panels visible while in Galaxy Map](#mfd-003--cockpit-mfd-panels-visible-while-in-galaxy-map)
@@ -21,11 +22,29 @@
 
 ## Open Issues
 
-*None at this time.*
+*(No open issues)*
 
 ---
 
 ## Resolved
+
+### MFD-008 | Multi-screen packages render as separate 3D quads instead of consolidated multi-tab displays
+
+- **ID**: MFD-008
+- **Discovered Date**: 2026-10-15
+- **Fixed Date**: 2026-10-15
+- **Root Cause & Architecture Analysis**:
+  See full RCA document at `docs/rca/MFD-008-display-duplication.md`.
+  `packages/ship/manifest.json` declared 3 separate screens (`modules`, `power`, `cargo`) and `packages/exploration/manifest.json` declared 2 separate screens (`system`, `bio`). Because `mfd_manager.cpp` instantiates a dedicated 3D Direct3D 11 quad for every screen declared in any package manifest, 6 floating quads were spawned in the cockpit instead of the intended 3 consolidated multi-tab consoles (Left: Ship Readout, Center: Route & Spansh, Right: Exploration Survey).
+- **Fix**:
+  1. Consolidate `packages/ship/` into a single multi-tab screen `screens/ship.json` containing tabs `integrity` (list), `power` (bars), and `cargo` (list). Deleted obsolete separate screen files. Updated `packages/ship/manifest.json` to declare exactly 1 screen with default left console pose (`[-0.28, -0.22, 0.55]`, yaw: 32°, pitch: -22°).
+  2. Updated `companion/cmd/ship` to maintain all three domains in memory and atomically emit updates to `screens/ship.json`.
+  3. Consolidate `packages/exploration/` into a single multi-tab screen `screens/exploration.json` containing tabs `system` (list) and `bio` (list). Deleted obsolete separate screen files. Updated `packages/exploration/manifest.json` to declare exactly 1 screen with default right console pose (`[0.28, -0.22, 0.55]`, yaw: -32°, pitch: -22°).
+  4. Updated `companion/cmd/exploration` to maintain system and bio domains and atomically emit updates to `screens/exploration.json`.
+  5. Updated `packages/route/manifest.json` with explicit center console pose (`[0.0, -0.22, 0.55]`, yaw: 0°, pitch: -22°).
+  6. Updated `tools/install_mfd.py` and `companion/cmd/installer/main.go` to purge obsolete screen files during upgrades.
+  7. Re-tested all Go companion packages and C++ unit tests, rebuilt release package and verified installer.
+---
 
 ### MFD-003 | Cockpit MFD panels visible while in Galaxy Map
 

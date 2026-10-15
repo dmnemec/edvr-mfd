@@ -1,16 +1,30 @@
 {
+  "$schema": "https://dmnemec.github.io/edvr-mfd/schema/display.v1.schema.json",
   "schemaVersion": 1,
-  "title": "POWER",
-  "subtitle": "DISTRIBUTION & DRAW",
+  "title": "SHIP READOUT",
+  "subtitle": "STANDBY",
   "statusBadge": {
     "text": "WAITING FOR DATA",
     "color": "dim"
   },
-  "footerHint": "Awaiting power telemetry...",
+  "footerHint": "Awaiting ship telemetry...",
   "tabs": [
     {
-      "id": "pips",
-      "title": "PIPS & POWER",
+      "id": "integrity",
+      "title": "INTEGRITY",
+      "type": "list",
+      "items": [
+        {
+          "id": "placeholder",
+          "label": "No module telemetry",
+          "value": "—",
+          "valueColor": "dim"
+        }
+      ]
+    },
+    {
+      "id": "power",
+      "title": "POWER",
       "type": "bars",
       "items": [
         {
@@ -40,26 +54,13 @@
       ]
     },
     {
-      "id": "status",
-      "title": "STATUS",
-      "type": "keyvalue",
-      "items": [
-        {
-          "id": "power_status",
-          "key": "Status",
-          "value": "Awaiting telemetry...",
-          "valueColor": "dim"
-        }
-      ]
-    },
-    {
-      "id": "priorities",
-      "title": "PRIORITIES",
+      "id": "cargo",
+      "title": "CARGO",
       "type": "list",
       "items": [
         {
           "id": "placeholder",
-          "label": "No module info",
+          "label": "No cargo detected",
           "value": "—",
           "valueColor": "dim"
         }

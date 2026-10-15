@@ -1,0 +1,41 @@
+{
+  "$schema": "https://dmnemec.github.io/edvr-mfd/schema/display.v1.schema.json",
+  "schemaVersion": 1,
+  "title": "EXPLORATION",
+  "subtitle": "STANDBY",
+  "statusBadge": {
+    "text": "WAITING FOR SCAN",
+    "color": "dim"
+  },
+  "footerHint": "Awaiting system jump or scan telemetry...",
+  "tabs": [
+    {
+      "id": "system",
+      "title": "SYSTEM",
+      "type": "list",
+      "items": [
+        {
+          "id": "placeholder_bodies",
+          "label": "No bodies scanned",
+          "sublabel": "Honk system to begin survey",
+          "value": "—",
+          "valueColor": "dim"
+        }
+      ]
+    },
+    {
+      "id": "bio",
+      "title": "BIO",
+      "type": "list",
+      "items": [
+        {
+          "id": "placeholder_bodies",
+          "label": "No bio signals detected",
+          "sublabel": "Probe landable planets with DSS",
+          "value": "—",
+          "valueColor": "dim"
+        }
+      ]
+    }
+  ]
+}

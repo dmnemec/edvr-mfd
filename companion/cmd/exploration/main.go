@@ -35,8 +35,7 @@ func main() {
 	cfg := DefaultConfig()
 	if *pkgDir != "" {
 		cfg.PackageDir = *pkgDir
-		cfg.SystemScreenFile = env.ScreenPath(*pkgDir, "screens/system.json")
-		cfg.BioScreenFile = env.ScreenPath(*pkgDir, "screens/bio.json")
+		cfg.ExplorationScreenFile = env.ScreenPath(*pkgDir, "screens/exploration.json")
 	}
 	if *journalDir != "" {
 		cfg.JournalDir = *journalDir

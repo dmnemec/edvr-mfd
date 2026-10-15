@@ -17,27 +17,82 @@ import (
 )
 
 func TestSeedFilesValidation(t *testing.T) {
-	for _, screenFile := range []string{"system.json", "bio.json"} {
-		t.Run(screenFile, func(t *testing.T) {
-			path := filepath.Join("..", "..", "..", "packages", "exploration", "screens", screenFile)
-			data, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("failed to read seed file %s: %v", path, err)
-			}
+	screenPath := filepath.Join("..", "..", "..", "packages", "exploration", "screens", "exploration.json")
+	data, err := os.ReadFile(screenPath)
+	if err != nil {
+		t.Fatalf("failed to read seed file %s: %v", screenPath, err)
+	}
 
-			var disp display.Display
-			if err := json.Unmarshal(data, &disp); err != nil {
-				t.Fatalf("failed to unmarshal seed file %s: %v", path, err)
-			}
+	var disp display.Display
+	if err := json.Unmarshal(data, &disp); err != nil {
+		t.Fatalf("failed to unmarshal seed file %s: %v", screenPath, err)
+	}
 
-			if err := display.Validate(&disp); err != nil {
-				t.Fatalf("seed file %s failed schema validation: %v", path, err)
-			}
+	if err := display.Validate(&disp); err != nil {
+		t.Fatalf("seed file %s failed schema validation: %v", screenPath, err)
+	}
 
-			if disp.StatusBadge == nil || disp.StatusBadge.Text != "WAITING FOR SCAN" {
-				t.Errorf("expected WAITING FOR SCAN badge, got %+v", disp.StatusBadge)
-			}
-		})
+	if disp.StatusBadge == nil || disp.StatusBadge.Text != "WAITING FOR SCAN" {
+		t.Errorf("expected WAITING FOR SCAN badge, got %+v", disp.StatusBadge)
+	}
+
+	if len(disp.Tabs) != 2 {
+		t.Fatalf("expected exactly 2 tabs (system, bio), got %d", len(disp.Tabs))
+	}
+	if disp.Tabs[0].ID != "system" || disp.Tabs[1].ID != "bio" {
+		t.Errorf("unexpected tab IDs: %s, %s", disp.Tabs[0].ID, disp.Tabs[1].ID)
+	}
+
+	manifestPath := filepath.Join("..", "..", "..", "packages", "exploration", "manifest.json")
+	mBytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("failed reading manifest: %v", err)
+	}
+
+	var manifest struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		Screens  []struct {
+			ID    string `json:"id"`
+			File  string `json:"file"`
+			Title string `json:"title"`
+			Pose  *struct {
+				Position []float64 `json:"position"`
+				PitchDeg float64   `json:"pitchDeg"`
+				YawDeg   float64   `json:"yawDeg"`
+			} `json:"pose"`
+		} `json:"screens"`
+		Companions []struct {
+			ID  string `json:"id"`
+			Exe string `json:"exe"`
+		} `json:"companions"`
+	}
+	if err := json.Unmarshal(mBytes, &manifest); err != nil {
+		t.Fatalf("failed unmarshaling manifest: %v", err)
+	}
+
+	if manifest.ID != "exploration" || manifest.Name != "System & Exobiology Survey" {
+		t.Errorf("unexpected manifest header: %+v", manifest)
+	}
+	if len(manifest.Screens) != 1 {
+		t.Fatalf("expected exactly 1 screen in manifest, got %d", len(manifest.Screens))
+	}
+	scr := manifest.Screens[0]
+	if scr.ID != "exploration" || scr.File != "screens/exploration.json" || scr.Title != "EXPLORATION" {
+		t.Errorf("unexpected screen declaration: %+v", scr)
+	}
+	if scr.Pose == nil || len(scr.Pose.Position) != 3 {
+		t.Fatalf("expected pose with 3 position coordinates, got %+v", scr.Pose)
+	}
+	// Right console pose: x=0.28, y=-0.22, z=0.55, yaw=-32, pitch=-22
+	if scr.Pose.Position[0] != 0.28 || scr.Pose.Position[1] != -0.22 || scr.Pose.Position[2] != 0.55 {
+		t.Errorf("unexpected pose position: %+v", scr.Pose.Position)
+	}
+	if scr.Pose.YawDeg != -32.0 || scr.Pose.PitchDeg != -22.0 {
+		t.Errorf("unexpected pose angles: yaw=%v, pitch=%v", scr.Pose.YawDeg, scr.Pose.PitchDeg)
+	}
+	if len(manifest.Companions) != 1 || manifest.Companions[0].ID != "exploration-feed" {
+		t.Errorf("expected companion 'exploration-feed', got %+v", manifest.Companions)
 	}
 }
 
@@ -622,26 +677,81 @@ func TestBioScreen_StagesAndLiveSampleDistance(t *testing.T) {
 	}
 }
 
+func TestExplorationScreen_ConsolidatedTabs(t *testing.T) {
+	st := NewSystemState(t.TempDir())
+	st.StarSystem = "Epsilon Eridani"
+	st.BodyCount = 3
+	st.Bodies = map[int]*BodyState{
+		1: {
+			BodyID:                1,
+			BodyName:              "Epsilon Eridani 1",
+			PlanetClass:           "High metal content body",
+			DistanceFromArrivalLS: 150,
+			Landable:              true,
+			DetailedScan:          true,
+			BioSignalsCount:       2,
+			Genuses:               []string{"Bacterium", "Stratum"},
+			Organics: map[string]*OrganicState{
+				"Stratum": {Genus: "Stratum", Species: "Stratum Tectonicas", Stage: "Analyse"},
+			},
+		},
+	}
+
+	disp := st.BuildExplorationDisplay()
+	if err := display.Validate(disp); err != nil {
+		t.Fatalf("BuildExplorationDisplay failed validation: %v", err)
+	}
+
+	if disp.Title != "EXPLORATION" {
+		t.Errorf("expected Title 'EXPLORATION', got %s", disp.Title)
+	}
+	if disp.Subtitle != "Epsilon Eridani" {
+		t.Errorf("expected Subtitle 'Epsilon Eridani', got %s", disp.Subtitle)
+	}
+	if len(disp.Tabs) != 2 {
+		t.Fatalf("expected 2 tabs, got %d", len(disp.Tabs))
+	}
+
+	// Tab 1: System (list)
+	sysTab := disp.Tabs[0]
+	if sysTab.ID != "system" || sysTab.Type != display.TabTypeList {
+		t.Errorf("unexpected Tab 1: %+v", sysTab)
+	}
+	if len(sysTab.Items) < 1 {
+		t.Fatalf("expected items in system tab, got 0")
+	}
+
+	// Tab 2: Bio (list)
+	bioTab := disp.Tabs[1]
+	if bioTab.ID != "bio" || bioTab.Type != display.TabTypeList {
+		t.Errorf("unexpected Tab 2: %+v", bioTab)
+	}
+	if len(bioTab.Items) != 1 {
+		t.Fatalf("expected 1 bio body item, got %d", len(bioTab.Items))
+	}
+	if bioTab.Items[0].Label != "1" && bioTab.Items[0].Label != "Epsilon Eridani 1" {
+		t.Errorf("unexpected bio body label: %s", bioTab.Items[0].Label)
+	}
+}
+
 func TestEngineEndToEnd(t *testing.T) {
 	pkgDir := t.TempDir()
 	journalDir := t.TempDir()
 	systemsDir := filepath.Join(pkgDir, "systems")
 
-	sysFile := filepath.Join(pkgDir, "screens", "system.json")
-	bioFile := filepath.Join(pkgDir, "screens", "bio.json")
+	expFile := filepath.Join(pkgDir, "screens", "exploration.json")
 	eventsFile := filepath.Join(pkgDir, "events.jsonl")
 
 	_ = os.MkdirAll(filepath.Join(pkgDir, "screens"), 0o755)
 
 	cfg := Config{
-		PackageDir:       pkgDir,
-		JournalDir:       journalDir,
-		SystemsDir:       systemsDir,
-		EventsPath:       eventsFile,
-		SystemScreenFile: sysFile,
-		BioScreenFile:    bioFile,
-		CoalesceRate:     10 * time.Millisecond,
-		PollInterval:     10 * time.Millisecond,
+		PackageDir:            pkgDir,
+		JournalDir:            journalDir,
+		SystemsDir:            systemsDir,
+		EventsPath:            eventsFile,
+		ExplorationScreenFile: expFile,
+		CoalesceRate:          10 * time.Millisecond,
+		PollInterval:          10 * time.Millisecond,
 	}
 
 	w := writer.NewCoalescedWriter(writer.WithInterval(10 * time.Millisecond))
@@ -665,24 +775,30 @@ func TestEngineEndToEnd(t *testing.T) {
 		errCh <- eng.Run(ctx)
 	}()
 
-	// Wait for engine to process initial journal entries and write screens
+	// Wait for engine to process initial journal entries and write screen
 	time.Sleep(100 * time.Millisecond)
 	_ = eng.FlushScreens()
 
-	// Verify system.json was written and is valid
-	sysData, err := os.ReadFile(sysFile)
+	// Verify exploration.json was written and is valid
+	expData, err := os.ReadFile(expFile)
 	if err != nil {
-		t.Fatalf("failed to read written system.json: %v", err)
+		t.Fatalf("failed to read written exploration.json: %v", err)
 	}
-	var sysDisp display.Display
-	if err := json.Unmarshal(sysData, &sysDisp); err != nil {
-		t.Fatalf("failed to unmarshal written system.json: %v", err)
+	var expDisp display.Display
+	if err := json.Unmarshal(expData, &expDisp); err != nil {
+		t.Fatalf("failed to unmarshal written exploration.json: %v", err)
 	}
-	if err := display.Validate(&sysDisp); err != nil {
-		t.Fatalf("written system.json failed schema validation: %v", err)
+	if err := display.Validate(&expDisp); err != nil {
+		t.Fatalf("written exploration.json failed schema validation: %v", err)
 	}
-	if sysDisp.Subtitle != "Barnard's Star" {
-		t.Errorf("expected subtitle 'Barnard's Star', got %s", sysDisp.Subtitle)
+	if expDisp.Title != "EXPLORATION" {
+		t.Errorf("expected title 'EXPLORATION', got %s", expDisp.Title)
+	}
+	if expDisp.Subtitle != "Barnard's Star" {
+		t.Errorf("expected subtitle 'Barnard's Star', got %s", expDisp.Subtitle)
+	}
+	if len(expDisp.Tabs) != 2 {
+		t.Errorf("expected 2 tabs in exploration.json, got %d", len(expDisp.Tabs))
 	}
 
 	cancel()

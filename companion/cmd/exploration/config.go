@@ -12,14 +12,13 @@ import (
 
 // Config configures the Exploration companion runner.
 type Config struct {
-	PackageDir       string
-	JournalDir       string
-	SystemsDir       string
-	EventsPath       string
-	SystemScreenFile string
-	BioScreenFile    string
-	CoalesceRate     time.Duration
-	PollInterval     time.Duration
+	PackageDir            string
+	JournalDir            string
+	SystemsDir            string
+	EventsPath            string
+	ExplorationScreenFile string
+	CoalesceRate          time.Duration
+	PollInterval          time.Duration
 }
 
 // DefaultSystemsDir returns %LOCALAPPDATA%\EDVR\mfd-companion\systems per §12.2.
@@ -43,13 +42,12 @@ func DefaultConfig() Config {
 	envCfg := env.Read()
 
 	return Config{
-		PackageDir:       pkgDir,
-		JournalDir:       jDir,
-		SystemsDir:       DefaultSystemsDir(),
-		EventsPath:       envCfg.EventsPath,
-		SystemScreenFile: env.ScreenPath(pkgDir, "screens/system.json"),
-		BioScreenFile:    env.ScreenPath(pkgDir, "screens/bio.json"),
-		CoalesceRate:     writer.DefaultCoalesceInterval,
-		PollInterval:     50 * time.Millisecond,
+		PackageDir:            pkgDir,
+		JournalDir:            jDir,
+		SystemsDir:            DefaultSystemsDir(),
+		EventsPath:            envCfg.EventsPath,
+		ExplorationScreenFile: env.ScreenPath(pkgDir, "screens/exploration.json"),
+		CoalesceRate:          writer.DefaultCoalesceInterval,
+		PollInterval:          50 * time.Millisecond,
 	}
 }

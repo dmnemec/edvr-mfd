@@ -18,14 +18,12 @@ import (
 
 // Config configures the Ship companion runner.
 type Config struct {
-	PackageDir      string
-	JournalDir      string
-	PriceCachePath  string
-	CoalesceRate    time.Duration
-	PollInterval    time.Duration
-	ModulesFile     string
-	PowerFile       string
-	CargoFile       string
+	PackageDir     string
+	JournalDir     string
+	PriceCachePath string
+	CoalesceRate   time.Duration
+	PollInterval   time.Duration
+	ShipFile       string
 }
 
 // DefaultConfig returns default configuration resolved from environment and standard paths.
@@ -39,9 +37,7 @@ func DefaultConfig() Config {
 		PriceCachePath: env.MeanPricesPath(),
 		CoalesceRate:   writer.DefaultCoalesceInterval,
 		PollInterval:   50 * time.Millisecond,
-		ModulesFile:    env.ScreenPath(pkgDir, "screens/modules.json"),
-		PowerFile:      env.ScreenPath(pkgDir, "screens/power.json"),
-		CargoFile:      env.ScreenPath(pkgDir, "screens/cargo.json"),
+		ShipFile:       env.ScreenPath(pkgDir, "screens/ship.json"),
 	}
 }
 
@@ -75,18 +71,13 @@ func (e *Engine) State() *ShipState {
 	return e.state
 }
 
-// FlushScreens forces an immediate regeneration and flush of all 3 screens.
+// FlushScreens forces an immediate regeneration and flush of the consolidated ship screen.
 func (e *Engine) FlushScreens() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	modDisp := e.state.BuildModulesDisplay()
-	powDisp := e.state.BuildPowerDisplay()
-	carDisp := e.state.BuildCargoDisplay()
-
-	_ = e.writer.Queue(e.cfg.ModulesFile, modDisp)
-	_ = e.writer.Queue(e.cfg.PowerFile, powDisp)
-	_ = e.writer.Queue(e.cfg.CargoFile, carDisp)
+	shipDisp := e.state.BuildShipDisplay()
+	_ = e.writer.Queue(e.cfg.ShipFile, shipDisp)
 
 	return e.writer.Flush()
 }
@@ -129,14 +120,8 @@ func (e *Engine) Run(ctx context.Context) error {
 				return nil
 			}
 			modChanged, powChanged, carChanged := e.state.HandleJournalEntry(entry)
-			if modChanged {
-				_ = e.writer.Queue(e.cfg.ModulesFile, e.state.BuildModulesDisplay())
-			}
-			if powChanged {
-				_ = e.writer.Queue(e.cfg.PowerFile, e.state.BuildPowerDisplay())
-			}
-			if carChanged {
-				_ = e.writer.Queue(e.cfg.CargoFile, e.state.BuildCargoDisplay())
+			if modChanged || powChanged || carChanged {
+				_ = e.writer.Queue(e.cfg.ShipFile, e.state.BuildShipDisplay())
 			}
 
 		// Status.json feed
@@ -145,7 +130,7 @@ func (e *Engine) Run(ctx context.Context) error {
 				continue
 			}
 			if changed := e.state.HandleStatus(snap); changed {
-				_ = e.writer.Queue(e.cfg.PowerFile, e.state.BuildPowerDisplay())
+				_ = e.writer.Queue(e.cfg.ShipFile, e.state.BuildShipDisplay())
 			}
 
 		// Cargo.json feed
@@ -154,7 +139,7 @@ func (e *Engine) Run(ctx context.Context) error {
 				continue
 			}
 			if changed := e.state.HandleCargo(snap); changed {
-				_ = e.writer.Queue(e.cfg.CargoFile, e.state.BuildCargoDisplay())
+				_ = e.writer.Queue(e.cfg.ShipFile, e.state.BuildShipDisplay())
 			}
 
 		// Market.json feed
@@ -163,7 +148,7 @@ func (e *Engine) Run(ctx context.Context) error {
 				continue
 			}
 			if changed := e.state.HandleMarket(snap); changed {
-				_ = e.writer.Queue(e.cfg.CargoFile, e.state.BuildCargoDisplay())
+				_ = e.writer.Queue(e.cfg.ShipFile, e.state.BuildShipDisplay())
 			}
 
 		// ModuleInfo.json feed
@@ -172,7 +157,7 @@ func (e *Engine) Run(ctx context.Context) error {
 				continue
 			}
 			if changed := e.state.HandleModuleInfo(snap); changed {
-				_ = e.writer.Queue(e.cfg.PowerFile, e.state.BuildPowerDisplay())
+				_ = e.writer.Queue(e.cfg.ShipFile, e.state.BuildShipDisplay())
 			}
 
 		// Non-fatal error logs
@@ -211,9 +196,7 @@ func main() {
 	cfg := DefaultConfig()
 	if *pkgDir != "" {
 		cfg.PackageDir = *pkgDir
-		cfg.ModulesFile = env.ScreenPath(*pkgDir, "screens/modules.json")
-		cfg.PowerFile = env.ScreenPath(*pkgDir, "screens/power.json")
-		cfg.CargoFile = env.ScreenPath(*pkgDir, "screens/cargo.json")
+		cfg.ShipFile = env.ScreenPath(*pkgDir, "screens/ship.json")
 	}
 	if *journalDir != "" {
 		cfg.JournalDir = *journalDir

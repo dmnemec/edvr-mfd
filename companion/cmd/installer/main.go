@@ -397,6 +397,23 @@ func runInstall(gameDir string, srcDll string, srcMfdsDir string, force bool, dr
 		if err := copyTree(srcPkgDir, dstPkgDir, dryRun); err != nil {
 			return false, fmt.Errorf("failed to install package '%s': %w", pkgID, err)
 		}
+
+		// Clean up obsolete separate screens consolidated into unified consoles (Ticket MFD-008)
+		if pkgID == "ship" {
+			for _, oldScreen := range []string{"modules.json", "power.json", "cargo.json"} {
+				oldPath := filepath.Join(dstPkgDir, "screens", oldScreen)
+				if _, err := os.Stat(oldPath); err == nil && !dryRun {
+					_ = os.Remove(oldPath)
+				}
+			}
+		} else if pkgID == "exploration" {
+			for _, oldScreen := range []string{"system.json", "bio.json"} {
+				oldPath := filepath.Join(dstPkgDir, "screens", oldScreen)
+				if _, err := os.Stat(oldPath); err == nil && !dryRun {
+					_ = os.Remove(oldPath)
+				}
+			}
+		}
 	}
 
 	fmt.Printf("\n[SUCCESS] EDVR MFD Plugin installed successfully to:\n  %s\n", gameDir)

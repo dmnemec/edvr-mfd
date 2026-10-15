@@ -292,6 +292,299 @@ func (s *ShipState) HandleModuleInfo(snap elite.ModuleInfoSnapshot) bool {
 	return changed
 }
 
+// BuildShipDisplay generates the consolidated display model for screens/ship.json (Ticket MFD-008).
+// Consolidates Integrity (modules list), Power (distribution bars), and Cargo (inventory list).
+func (s *ShipState) BuildShipDisplay() *display.Display {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// 1. Integrity tab & module analysis
+	damagedCount := 0
+	minHealth := 1.0
+
+	modules := make([]ShipModule, len(s.Modules))
+	copy(modules, s.Modules)
+
+	for _, m := range modules {
+		if m.Health < 0.9999 {
+			damagedCount++
+			if m.Health < minHealth {
+				minHealth = m.Health
+			}
+		}
+	}
+
+	sort.SliceStable(modules, func(i, j int) bool {
+		mI, mJ := modules[i], modules[j]
+		iDamaged := mI.Health < 0.9999
+		jDamaged := mJ.Health < 0.9999
+
+		if iDamaged && !jDamaged {
+			return true
+		}
+		if !iDamaged && jDamaged {
+			return false
+		}
+		if iDamaged && jDamaged {
+			if math.Abs(mI.Health-mJ.Health) > 0.001 {
+				return mI.Health < mJ.Health
+			}
+		}
+
+		if mI.Group != mJ.Group {
+			return mI.Group < mJ.Group
+		}
+		return mI.Slot < mJ.Slot
+	})
+
+	integrityTab := display.Tab{
+		ID:    "integrity",
+		Title: "INTEGRITY",
+		Type:  display.TabTypeList,
+	}
+
+	if len(modules) == 0 {
+		integrityTab.Items = []display.Item{
+			{
+				ID:         "placeholder",
+				Label:      "No module telemetry",
+				Value:      "—",
+				ValueColor: display.PaletteDim,
+			},
+		}
+	} else {
+		for _, m := range modules {
+			pct := int(math.Round(m.Health * 100))
+			valColor := display.PaletteOK
+			if m.Health < 0.40 {
+				valColor = display.PaletteCrit
+			} else if m.Health < 0.80 {
+				valColor = display.PaletteWarn
+			}
+
+			icon := ""
+			if m.Health < 0.80 || !m.On {
+				icon = display.IconWarning
+			}
+
+			item := display.Item{
+				ID:         "slot_" + strings.ToLower(m.Slot),
+				Label:      m.Label,
+				Sublabel:   m.Sublabel,
+				Value:      fmt.Sprintf("%d%%", pct),
+				ValueColor: valColor,
+				Icon:       icon,
+				Action:     display.ActionEvent,
+			}
+			integrityTab.Items = append(integrityTab.Items, item)
+		}
+	}
+
+	// 2. Power tab (bars)
+	capacity := s.PowerPlantCapacity
+	if capacity <= 0 {
+		capacity = 15.0
+	}
+
+	totalDraw := 0.0
+	for _, m := range s.Modules {
+		if m.On {
+			totalDraw += m.PowerDraw
+		}
+	}
+
+	fuelMain := s.Fuel.FuelMain
+	fuelCapMain := s.FuelCapacity.Main
+	if fuelCapMain <= 0 {
+		fuelCapMain = math.Max(fuelMain, 32.0)
+	}
+
+	fuelRes := s.Fuel.FuelReservoir
+	fuelCapRes := s.FuelCapacity.Reserve
+	if fuelCapRes <= 0 {
+		fuelCapRes = math.Max(fuelRes, 1.0)
+	}
+
+	powerBarColor := display.PaletteOK
+	if totalDraw > capacity {
+		powerBarColor = display.PaletteCrit
+	} else if totalDraw > 0.90*capacity {
+		powerBarColor = display.PaletteWarn
+	}
+
+	fuelBarColor := display.PaletteOK
+	if s.LowFuel {
+		fuelBarColor = display.PaletteCrit
+	}
+
+	powerTab := display.Tab{
+		ID:    "power",
+		Title: "POWER",
+		Type:  display.TabTypeBars,
+		Bars: []display.Bar{
+			{
+				ID:       "sys",
+				Label:    "SYS",
+				Value:    float64(s.Pips.Sys()),
+				Max:      8,
+				Segments: 8,
+				Color:    display.PaletteAccent,
+			},
+			{
+				ID:       "eng",
+				Label:    "ENG",
+				Value:    float64(s.Pips.Eng()),
+				Max:      8,
+				Segments: 8,
+				Color:    display.PaletteAccent,
+			},
+			{
+				ID:       "wep",
+				Label:    "WEP",
+				Value:    float64(s.Pips.Wep()),
+				Max:      8,
+				Segments: 8,
+				Color:    display.PaletteAccent,
+			},
+			{
+				ID:    "power_draw",
+				Label: fmt.Sprintf("Power Draw (%.1f / %.1f MW)", totalDraw, capacity),
+				Value: totalDraw,
+				Max:   capacity,
+				Color: powerBarColor,
+			},
+			{
+				ID:    "fuel_main",
+				Label: fmt.Sprintf("Main Fuel (%.1f / %.1f T)", fuelMain, fuelCapMain),
+				Value: fuelMain,
+				Max:   fuelCapMain,
+				Color: fuelBarColor,
+			},
+			{
+				ID:    "fuel_res",
+				Label: fmt.Sprintf("Reservoir (%.2f / %.2f T)", fuelRes, fuelCapRes),
+				Value: fuelRes,
+				Max:   fuelCapRes,
+				Color: display.PaletteOK,
+			},
+		},
+	}
+
+	// 3. Cargo tab (list)
+	var inventory []elite.CargoItem
+	if s.Cargo != nil {
+		inventory = s.Cargo.Inventory
+	}
+
+	type cargoRow struct {
+		item      elite.CargoItem
+		meanPrice int64
+		hasPrice  bool
+	}
+
+	rows := make([]cargoRow, 0, len(inventory))
+	for _, it := range inventory {
+		price, ok := s.lookupPrice(it.Name, it.NameLocalised)
+		rows = append(rows, cargoRow{
+			item:      it,
+			meanPrice: price,
+			hasPrice:  ok && price > 0,
+		})
+	}
+
+	cargoTab := display.Tab{
+		ID:    "cargo",
+		Title: "CARGO",
+		Type:  display.TabTypeList,
+	}
+
+	if len(rows) == 0 {
+		cargoTab.Items = []display.Item{
+			{
+				ID:         "placeholder",
+				Label:      "No cargo detected",
+				Value:      "—",
+				ValueColor: display.PaletteDim,
+			},
+		}
+	} else {
+		for i, r := range rows {
+			label := r.item.NameLocalised
+			if label == "" {
+				label = FormatModuleName(r.item.Name)
+			}
+
+			sub := fmt.Sprintf("%d T", r.item.Count)
+			if r.item.Stolen > 0 {
+				sub = fmt.Sprintf("%d T (%d Stolen)", r.item.Count, r.item.Stolen)
+			}
+
+			valStr := "—"
+			valColor := display.PaletteDim
+			if r.hasPrice {
+				valStr = formatCredits(r.meanPrice) + " CR"
+				valColor = display.PaletteNormal
+			}
+
+			icon := ""
+			if r.item.Stolen > 0 {
+				icon = display.IconLock
+			}
+
+			clean := elite.CleanItemName(r.item.Name)
+			if clean == "" {
+				clean = fmt.Sprintf("item_%d", i)
+			}
+
+			item := display.Item{
+				ID:         fmt.Sprintf("cargo_%s_%d", clean, i),
+				Label:      label,
+				Sublabel:   sub,
+				Value:      valStr,
+				ValueColor: valColor,
+				Icon:       icon,
+				Action:     display.ActionEvent,
+			}
+			cargoTab.Items = append(cargoTab.Items, item)
+		}
+	}
+
+	// Display metadata & StatusBadge
+	badgeText := "NOMINAL"
+	badgeColor := display.PaletteOK
+	if s.Overheating {
+		badgeText = "OVERHEATING"
+		badgeColor = display.PaletteCrit
+	} else if s.LowFuel {
+		badgeText = "LOW FUEL"
+		badgeColor = display.PaletteCrit
+	} else if damagedCount > 0 {
+		badgeText = fmt.Sprintf("%d DAMAGED", damagedCount)
+		if minHealth < 0.40 {
+			badgeColor = display.PaletteCrit
+		} else {
+			badgeColor = display.PaletteWarn
+		}
+	}
+
+	subtitle := formatShipName(s.Ship)
+	if subtitle == "" {
+		subtitle = "STANDBY"
+	}
+
+	return &display.Display{
+		SchemaVersion: display.CurrentSchemaVersion,
+		Title:         "SHIP READOUT",
+		Subtitle:      subtitle,
+		StatusBadge: &display.StatusBadge{
+			Text:  badgeText,
+			Color: badgeColor,
+		},
+		FooterHint: "UP/DOWN: SCROLL | LEFT/RIGHT: TAB",
+		Tabs:       []display.Tab{integrityTab, powerTab, cargoTab},
+	}
+}
+
 // BuildModulesDisplay generates the display model for screens/modules.json (§12.1).
 func (s *ShipState) BuildModulesDisplay() *display.Display {
 	s.mu.RLock()

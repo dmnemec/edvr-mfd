@@ -10,6 +10,13 @@
       "id": "route",
       "file": "screens/route.json",
       "title": "ROUTE",
+      "pose": {
+        "position": [0.0, -0.22, 0.55],
+        "pitchDeg": -22.0,
+        "yawDeg": 0.0,
+        "widthM": 0.24,
+        "heightM": 0.16
+      },
       "contexts": [
         "ship_cockpit",
         "docked"
