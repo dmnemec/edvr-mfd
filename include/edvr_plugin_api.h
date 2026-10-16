@@ -100,6 +100,12 @@ typedef struct EdvrPluginSettingDef {
 // Host services provided to plugins during initialization
 typedef struct EdvrHostServices {
     uint32_t structSize;
+    // Adds a row to the F8 menu's Plugins page. Returns 0 on success.
+    // Call it only from within onInitialize: anywhere else (after it returns, from onUpdate, onRenderEye,
+    // onFilterInput or another thread) it returns -1 and registers nothing.
+    // The host removes every setting the addon registered when the addon fails initialisation (onInitialize
+    // returns non-zero or faults), when it faults in a later callback and is disabled, and when it shuts down.
+    // Getters and setters therefore never outlive the addon's code.
     int (EDVR_API *registerSetting)(const EdvrPluginSettingDef* setting);
     void (EDVR_API *logNote)(const char* message);
 } EdvrHostServices;
@@ -112,6 +118,10 @@ typedef struct EdvrPluginCallbacks {
 
     int (EDVR_API *onInitialize)(const EdvrHostServices* host);
     void (EDVR_API *onShutdown)(void);
+    // headPose is the located head, not either eye: the OpenXR VIEW reference space located in the session's seated origin (the same local
+    // reference space the eyes' eyePose values are expressed in), at the frame's predicted display time. Metres, right-handed, +Y up, -Z forward.
+    // Its position lies between the eyes, so an eye is about half the interpupillary distance to either side of it and may be
+    // canted. Aim a gaze ray from this pose. Called once per frame, only when the head was located with valid position and orientation.
     void (EDVR_API *onUpdate)(const EdvrPosef* headPose, float dtSeconds);
     void (EDVR_API *onRenderEye)(const EdvrEyeRenderContext* eyeCtx);
     void (EDVR_API *onFilterInput)(EdvrInputContext* inputCtx);
