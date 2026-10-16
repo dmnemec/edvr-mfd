@@ -41,6 +41,7 @@ static std::atomic<bool> s_cockpitMfdEnabled{true};
 static std::atomic<bool> s_mfdShowAll{true};
 static std::atomic<bool> s_mfdHeadLocked{false};
 static std::atomic<bool> s_mfdHideAllToggle{false};
+static std::atomic<bool> s_mfdShowSettingsTab{true};
 
 struct PackageSettingDefHolder {
     std::string packageId;
@@ -119,6 +120,16 @@ static void EDVR_API setHideAllToggle(const char*, int64_t val, void*) {
     bool b = (val != 0);
     s_mfdHideAllToggle.store(b, std::memory_order_relaxed);
     writeIniBool(getPluginSettingsIniPath(), L"settings", L"mfd_hide_all_toggle", b);
+}
+
+static int64_t EDVR_API getShowSettingsTab(const char*, void*) {
+    return s_mfdShowSettingsTab.load(std::memory_order_relaxed) ? 1 : 0;
+}
+static void EDVR_API setShowSettingsTab(const char*, int64_t val, void*) {
+    bool b = (val != 0);
+    s_mfdShowSettingsTab.store(b, std::memory_order_relaxed);
+    MfdManager::instance().setShowSettingsTab(b);
+    writeIniBool(getPluginSettingsIniPath(), L"settings", L"mfd_show_settings_tab", b);
 }
 
 static int64_t EDVR_API getPackageShow(const char*, void* userData) {
@@ -209,6 +220,18 @@ static void registerMfdSettings(const EdvrHostServices* host,
     defHideAll.setter = setHideAllToggle;
     if (host->registerSetting(&defHideAll) < 0) logRejectedSetting(host, defHideAll.key);
 
+    EdvrPluginSettingDef defShowSettingsTab{};
+    defShowSettingsTab.structSize = sizeof(EdvrPluginSettingDef);
+    defShowSettingsTab.header = "Cockpit MFD";
+    defShowSettingsTab.key = "mfd_show_settings_tab";
+    defShowSettingsTab.label = "Show Settings Tab";
+    defShowSettingsTab.hint = "Show or hide the interactive SETTINGS tab across all MFD displays.";
+    defShowSettingsTab.type = EDVR_PLUGIN_SETTING_BOOL;
+    defShowSettingsTab.defaultValue = 1;
+    defShowSettingsTab.getter = getShowSettingsTab;
+    defShowSettingsTab.setter = setShowSettingsTab;
+    if (host->registerSetting(&defShowSettingsTab) < 0) logRejectedSetting(host, defShowSettingsTab.key);
+
     // 2. Dynamic Per-Package Settings (§9.2)
     std::lock_guard<std::mutex> lock(s_packageSettingsMutex);
     s_packageSettings.clear();
@@ -267,6 +290,7 @@ bool getPluginSettingBool(const std::string& key, bool defaultVal) {
     if (key == "mfd_show_all") return s_mfdShowAll.load();
     if (key == "mfd_head_locked") return s_mfdHeadLocked.load();
     if (key == "mfd_hide_all_toggle") return s_mfdHideAllToggle.load();
+    if (key == "mfd_show_settings_tab") return s_mfdShowSettingsTab.load();
 
     std::lock_guard<std::mutex> lock(s_packageSettingsMutex);
     for (const auto& pkg : s_packageSettings) {
@@ -285,6 +309,8 @@ void setPluginSettingBool(const std::string& key, bool val) {
         setHeadLocked(key.c_str(), val ? 1 : 0, nullptr);
     } else if (key == "mfd_hide_all_toggle") {
         setHideAllToggle(key.c_str(), val ? 1 : 0, nullptr);
+    } else if (key == "mfd_show_settings_tab") {
+        setShowSettingsTab(key.c_str(), val ? 1 : 0, nullptr);
     } else {
         std::lock_guard<std::mutex> lock(s_packageSettingsMutex);
         for (const auto& pkg : s_packageSettings) {
@@ -313,11 +339,13 @@ int EDVR_API mfdPluginInit(const EdvrHostServices* host) {
     s_mfdShowAll.store(readIniBool(iniPath, L"settings", L"mfd_show_all", true));
     s_mfdHeadLocked.store(readIniBool(iniPath, L"settings", L"mfd_head_locked", false));
     s_mfdHideAllToggle.store(readIniBool(iniPath, L"settings", L"mfd_hide_all_toggle", false));
+    s_mfdShowSettingsTab.store(readIniBool(iniPath, L"settings", L"mfd_show_settings_tab", true));
 
     MfdManager::instance().initialize(512, 384);
     MfdManager::instance().setEnabled(s_cockpitMfdEnabled.load());
     MfdManager::instance().setShowAllWindows(s_mfdShowAll.load());
     MfdManager::instance().setHeadLocked(s_mfdHeadLocked.load());
+    MfdManager::instance().setShowSettingsTab(s_mfdShowSettingsTab.load());
 
     std::wstring mfdsDir = getDefaultMfdsDirectory();
     auto packages = discoverPackages(mfdsDir);

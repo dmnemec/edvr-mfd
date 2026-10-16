@@ -376,6 +376,30 @@ void MfdManager::ensureSettingsTab(MfdScreen& screen) {
     if (!screen.provider) return;
     auto& model = screen.provider->viewModel();
 
+    if (!m_showSettingsTab.load(std::memory_order_relaxed)) {
+        auto it = std::find_if(model.tabs.begin(), model.tabs.end(), [](const MfdTab& tab) {
+            return tab.id == "__settings" || tab.title == "SETTINGS";
+        });
+        if (it != model.tabs.end()) {
+            int removedIdx = static_cast<int>(std::distance(model.tabs.begin(), it));
+            model.tabs.erase(it);
+            if (model.tabs.empty()) {
+                model.activeTabIndex = 0;
+            } else {
+                if (model.activeTabIndex >= static_cast<int>(model.tabs.size())) {
+                    model.activeTabIndex = static_cast<int>(model.tabs.size()) - 1;
+                } else if (model.activeTabIndex > removedIdx) {
+                    model.activeTabIndex--;
+                }
+                if (model.activeTabIndex < 0) {
+                    model.activeTabIndex = 0;
+                }
+            }
+            screen.isDirty = true;
+        }
+        return;
+    }
+
     MfdTab* settingsTab = nullptr;
     for (auto& tab : model.tabs) {
         if (tab.id == "__settings" || tab.title == "SETTINGS") {
@@ -902,6 +926,44 @@ void MfdManager::setShowAllWindows(bool show) {
             scr.currentAlpha = 1.0f;
         }
         scr.isDirty = true;
+    }
+}
+
+bool MfdManager::showSettingsTab() const {
+    return m_showSettingsTab.load(std::memory_order_relaxed);
+}
+
+void MfdManager::setShowSettingsTab(bool show) {
+    m_showSettingsTab.store(show, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(m_screensMutex);
+    for (auto& screen : m_screens) {
+        if (!screen.provider) continue;
+        auto& model = screen.provider->viewModel();
+        if (!show) {
+            auto it = std::find_if(model.tabs.begin(), model.tabs.end(), [](const MfdTab& tab) {
+                return tab.id == "__settings" || tab.title == "SETTINGS";
+            });
+            if (it != model.tabs.end()) {
+                int removedIdx = static_cast<int>(std::distance(model.tabs.begin(), it));
+                model.tabs.erase(it);
+                if (model.tabs.empty()) {
+                    model.activeTabIndex = 0;
+                } else {
+                    if (model.activeTabIndex >= static_cast<int>(model.tabs.size())) {
+                        model.activeTabIndex = static_cast<int>(model.tabs.size()) - 1;
+                    } else if (model.activeTabIndex > removedIdx) {
+                        model.activeTabIndex--;
+                    }
+                    if (model.activeTabIndex < 0) {
+                        model.activeTabIndex = 0;
+                    }
+                }
+                screen.isDirty = true;
+            }
+        } else {
+            ensureSettingsTab(screen);
+            screen.isDirty = true;
+        }
     }
 }
 

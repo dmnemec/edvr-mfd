@@ -17,6 +17,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <atomic>
+#include <mutex>
 
 struct XrPosef;
 struct XrFovf;
@@ -96,6 +98,8 @@ public:
     void setEnabled(bool enabled) { m_enabled = enabled; }
     bool showAllWindows() const;
     void setShowAllWindows(bool show);
+    bool showSettingsTab() const;
+    void setShowSettingsTab(bool show);
     int activeDisplayCount() const;
     void setActiveDisplayCount(int count);
     bool isHeadLocked() const;
@@ -195,6 +199,7 @@ public:
 private:
     bool m_enabled = true;
     bool m_showAllWindows = true;
+    std::atomic<bool> m_showSettingsTab{true};
     int m_activeDisplayCount = 2;
     bool m_headLocked = false;
     bool m_packagesLoaded = false;
@@ -208,6 +213,7 @@ private:
     std::wstring m_mfdsDir;
     std::wstring m_iniPathOverride;
 
+    mutable std::mutex m_screensMutex;
     std::vector<MfdScreen> m_screens;
     std::unique_ptr<MfdContentWatcher> m_contentWatcher;
     MfdInputRouter m_inputRouter;

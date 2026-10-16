@@ -2525,11 +2525,13 @@ int test_f8_settings_and_persistence() {
     setPluginSettingBool("mfd_show_all", true);
     setPluginSettingBool("mfd_head_locked", false);
     setPluginSettingBool("mfd_hide_all_toggle", false);
+    setPluginSettingBool("mfd_show_settings_tab", true);
 
     TEST_CHECK(getPluginSettingBool("cockpit_mfd_enabled", false) == true, "cockpit_mfd_enabled default 1");
     TEST_CHECK(getPluginSettingBool("mfd_show_all", false) == true, "mfd_show_all default 1");
     TEST_CHECK(getPluginSettingBool("mfd_head_locked", true) == false, "mfd_head_locked default 0");
     TEST_CHECK(getPluginSettingBool("mfd_hide_all_toggle", true) == false, "mfd_hide_all_toggle default 0");
+    TEST_CHECK(getPluginSettingBool("mfd_show_settings_tab", false) == true, "mfd_show_settings_tab default 1");
 
     // 2. Test INI round-trip persistence
     setPluginSettingBool("mfd_hide_all_toggle", true);
@@ -2541,6 +2543,13 @@ int test_f8_settings_and_persistence() {
     setPluginSettingBool("mfd_head_locked", true);
     val = GetPrivateProfileIntW(L"settings", L"mfd_head_locked", -1, iniPath.c_str());
     TEST_CHECK(val == 1, "mfd_head_locked persisted as 1 in edvr_mfd.ini");
+
+    setPluginSettingBool("mfd_show_settings_tab", false);
+    val = GetPrivateProfileIntW(L"settings", L"mfd_show_settings_tab", -1, iniPath.c_str());
+    TEST_CHECK(val == 0, "mfd_show_settings_tab persisted as 0 in edvr_mfd.ini");
+    setPluginSettingBool("mfd_show_settings_tab", true);
+    val = GetPrivateProfileIntW(L"settings", L"mfd_show_settings_tab", -1, iniPath.c_str());
+    TEST_CHECK(val == 1, "mfd_show_settings_tab persisted as 1 in edvr_mfd.ini");
 
     // 3. Test "Hide All" toggle behavior (Ticket D1 & MFD-006)
     EdvrPluginCallbacks callbacks{};
@@ -2586,6 +2595,7 @@ int test_f8_settings_and_persistence() {
     // Verify obsolete mfd_display_count was removed
     bool foundDisplayCount = false;
     bool foundHideAll = false;
+    bool foundShowSettingsTab = false;
     for (const auto& s : registered) {
         if (s.key && strcmp(s.key, "mfd_display_count") == 0) {
             foundDisplayCount = true;
@@ -2593,9 +2603,13 @@ int test_f8_settings_and_persistence() {
         if (s.key && strcmp(s.key, "mfd_hide_all_toggle") == 0) {
             foundHideAll = true;
         }
+        if (s.key && strcmp(s.key, "mfd_show_settings_tab") == 0) {
+            foundShowSettingsTab = true;
+        }
     }
     TEST_CHECK(!foundDisplayCount, "Obsolete mfd_display_count was removed");
     TEST_CHECK(foundHideAll, "mfd_hide_all_toggle was successfully registered");
+    TEST_CHECK(foundShowSettingsTab, "mfd_show_settings_tab was successfully registered");
 
     callbacks.onShutdown();
     return 0;
@@ -2885,6 +2899,104 @@ int test_dynamic_screens_cap_and_settings() {
     return 0;
 }
 
+// 22. Test Show Settings Tab Global Toggle & Tab Lifecycle
+int test_show_settings_tab_toggle() {
+    auto& mgr = MfdManager::instance();
+    bool init = mgr.initialize(320, 240);
+    ContextEvaluator::instance().stopWatcher();
+    ContextEvaluator::instance().updateFromStatus(kFlagInMainShip, 0, 0);
+    mgr.setEnabled(true);
+    TEST_CHECK(init, "MfdManager initialized");
+
+    MfdScreen* scr = mgr.findScreen("main_mfd");
+    if (!scr && mgr.screenCount() > 0) {
+        scr = &mgr.screens()[0];
+    }
+    TEST_CHECK(scr != nullptr, "Screen exists in manager");
+    TEST_CHECK(scr->provider != nullptr, "Screen provider exists");
+
+    auto& model = scr->provider->viewModel();
+
+    auto findSettingsTabIdx = [&]() -> int {
+        for (size_t i = 0; i < model.tabs.size(); ++i) {
+            if (model.tabs[i].id == "__settings" || model.tabs[i].title == "SETTINGS") {
+                return static_cast<int>(i);
+            }
+        }
+        return -1;
+    };
+
+    // 1. Initial state: showSettingsTab is true by default, and __settings tab exists
+    TEST_CHECK(mgr.showSettingsTab() == true, "showSettingsTab() default is true");
+    int initialIdx = findSettingsTabIdx();
+    TEST_CHECK(initialIdx >= 0, "__settings tab exists when showSettingsTab is true");
+
+    // Point activeTabIndex to settings tab
+    model.activeTabIndex = initialIdx;
+    scr->isDirty = false;
+
+    // 2. Toggle off: setShowSettingsTab(false)
+    mgr.setShowSettingsTab(false);
+    TEST_CHECK(mgr.showSettingsTab() == false, "showSettingsTab() is false after setShowSettingsTab(false)");
+    TEST_CHECK(findSettingsTabIdx() == -1, "__settings tab removed after setShowSettingsTab(false)");
+    TEST_CHECK(scr->isDirty == true, "Screen marked dirty when __settings tab removed");
+    if (!model.tabs.empty()) {
+        TEST_CHECK(model.activeTabIndex < static_cast<int>(model.tabs.size()), "activeTabIndex clamped within bounds");
+    } else {
+        TEST_CHECK(model.activeTabIndex == 0, "activeTabIndex clamped to 0 for empty tabs");
+    }
+
+    // Verify all screens in manager have no __settings tab
+    for (const auto& s : mgr.screens()) {
+        if (!s.provider) continue;
+        for (const auto& tab : s.provider->viewModel().tabs) {
+            TEST_CHECK(tab.id != "__settings" && tab.title != "SETTINGS", "No screen contains __settings tab when false");
+        }
+    }
+
+    // Call update to ensure periodic ensureSettingsTab does not recreate __settings tab
+    Vec3 headPos(0.0f, 0.0f, 0.0f);
+    Vec3 headFwd(0.0f, 0.0f, -1.0f);
+    mgr.update(headPos, headFwd, 0.016f);
+    TEST_CHECK(findSettingsTabIdx() == -1, "__settings tab remains absent during update() while showSettingsTab is false");
+
+    // 3. Toggle on: setShowSettingsTab(true)
+    scr->isDirty = false;
+    mgr.setShowSettingsTab(true);
+    TEST_CHECK(mgr.showSettingsTab() == true, "showSettingsTab() is true after setShowSettingsTab(true)");
+    int restoredIdx = findSettingsTabIdx();
+    TEST_CHECK(restoredIdx >= 0, "__settings tab restored after setShowSettingsTab(true)");
+    TEST_CHECK(scr->isDirty == true, "Screen marked dirty when __settings tab restored");
+    TEST_CHECK(model.tabs[restoredIdx].type == MfdTabType::kKeyValue, "Restored tab is kKeyValue");
+
+    // Verify all screens in manager have __settings tab restored
+    for (const auto& s : mgr.screens()) {
+        if (!s.provider) continue;
+        bool found = false;
+        for (const auto& tab : s.provider->viewModel().tabs) {
+            if (tab.id == "__settings" || tab.title == "SETTINGS") {
+                found = true;
+                break;
+            }
+        }
+        TEST_CHECK(found, "Every screen restored its __settings tab when true");
+    }
+
+    // 4. Test integration with setPluginSettingBool
+    setPluginSettingBool("mfd_show_settings_tab", false);
+    TEST_CHECK(getPluginSettingBool("mfd_show_settings_tab", true) == false, "getPluginSettingBool returns false");
+    TEST_CHECK(mgr.showSettingsTab() == false, "mgr.showSettingsTab() reflects plugin setting false");
+    TEST_CHECK(findSettingsTabIdx() == -1, "__settings tab removed via setPluginSettingBool");
+
+    setPluginSettingBool("mfd_show_settings_tab", true);
+    TEST_CHECK(getPluginSettingBool("mfd_show_settings_tab", false) == true, "getPluginSettingBool returns true");
+    TEST_CHECK(mgr.showSettingsTab() == true, "mgr.showSettingsTab() reflects plugin setting true");
+    TEST_CHECK(findSettingsTabIdx() >= 0, "__settings tab restored via setPluginSettingBool");
+
+    mgr.shutdown();
+    return 0;
+}
+
 int main() {
     std::cout << "[mfd_test] Running Cockpit MFD framework test suite..." << std::endl;
 
@@ -2953,6 +3065,9 @@ int main() {
 
     if (test_dynamic_screens_cap_and_settings() != 0) return 1;
     std::cout << "  ok  Dynamic Screens, 16-Cap, Settings Migration & Event Routing (Tickets A6, A7, A9, A12)" << std::endl;
+
+    if (test_show_settings_tab_toggle() != 0) return 1;
+    std::cout << "  ok  Show Settings Tab Global Toggle & Tab Lifecycle" << std::endl;
 
     std::cout << "[mfd_test] ALL TESTS PASSED." << std::endl;
     ExitProcess(0);
