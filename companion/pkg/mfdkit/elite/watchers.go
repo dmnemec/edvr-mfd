@@ -120,6 +120,7 @@ func (s StatusSnapshot) InSRV() bool          { return s.HasFlag(FlagInSRV) }
 func (s StatusSnapshot) InFighter() bool      { return s.HasFlag(FlagInFighter) }
 func (s StatusSnapshot) InMainShip() bool     { return s.HasFlag(FlagInMainShip) }
 func (s StatusSnapshot) GlideMode() bool      { return s.HasFlag2(Flag2GlideMode) }
+func (s StatusSnapshot) HardpointsDeployed() bool { return s.HasFlag(FlagHardpointsDeployed) }
 
 // CargoItem represents an inventory entry in Cargo.json.
 type CargoItem struct {

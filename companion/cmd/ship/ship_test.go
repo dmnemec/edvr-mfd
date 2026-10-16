@@ -740,3 +740,262 @@ func TestEngine_EndToEndPipeline(t *testing.T) {
 		t.Errorf("expected 3 tabs in ship.json, got %d", len(d.Tabs))
 	}
 }
+
+func TestPowerUsage_PriorityShedding(t *testing.T) {
+	pc := NewPriceCache(filepath.Join(t.TempDir(), "prices.json"))
+	state := NewShipState(pc)
+
+	// Configure modules across tiers 0..3:
+	// Tier 0 (Priority 0): MainEngines (6.0 MW), FSD (4.0 MW) -> 10.0 MW
+	// Tier 1 (Priority 1): Shield (6.0 MW) -> cumulative 16.0 MW <= 20.0 MW
+	// Tier 2 (Priority 2): Shield Boosters (5.0 MW) -> cumulative 21.0 MW > 20.0 MW (shed)
+	// Tier 3 (Priority 3): Cargo Hatch (2.0 MW) -> shed
+	loadout := elite.EventLoadout{
+		Timestamp: time.Now(),
+		Event:     "Loadout",
+		Ship:      "python",
+		Modules: []elite.LoadoutModule{
+			{Slot: "MainEngines", Item: "int_engine_size7_class5", Health: 1.0, On: true, Priority: 0},
+			{Slot: "FrameShiftDrive", Item: "int_hyperdrive_size6_class5", Health: 1.0, On: true, Priority: 0},
+			{Slot: "Slot01_Size6", Item: "int_shieldgenerator_size6_class5", Health: 1.0, On: true, Priority: 1},
+			{Slot: "TinyHardpoint1", Item: "hpt_shieldbooster_size0_class5", Health: 1.0, On: true, Priority: 2},
+			{Slot: "CargoHatch", Item: "cargohatch", Health: 1.0, On: true, Priority: 3},
+		},
+	}
+	state.HandleJournalEntry(elite.JournalEntry{Event: "Loadout", Data: &loadout})
+	state.PowerPlantCapacity = 20.0
+
+	modInfo := elite.ModuleInfoSnapshot{
+		Modules: []elite.ModuleInfoEntry{
+			{Slot: "MainEngines", Item: "int_engine_size7_class5", Power: 6.0, Priority: 0},
+			{Slot: "FrameShiftDrive", Item: "int_hyperdrive_size6_class5", Power: 4.0, Priority: 0},
+			{Slot: "Slot01_Size6", Item: "int_shieldgenerator_size6_class5", Power: 6.0, Priority: 1},
+			{Slot: "TinyHardpoint1", Item: "hpt_shieldbooster_size0_class5", Power: 5.0, Priority: 2},
+			{Slot: "CargoHatch", Item: "cargohatch", Power: 2.0, Priority: 3},
+		},
+	}
+	state.HandleModuleInfo(modInfo)
+
+	currentUsage, maxUsage := state.CalculatePowerUsage()
+	if currentUsage != 16.0 {
+		t.Fatalf("expected currentUsage 16.0 MW after shedding tiers 2 & 3, got %f", currentUsage)
+	}
+	if maxUsage != 23.0 {
+		t.Fatalf("expected maxUsage 23.0 MW, got %f", maxUsage)
+	}
+
+	dispPower := state.BuildPowerDisplay()
+	if err := display.Validate(dispPower); err != nil {
+		t.Fatalf("power display validation failed: %v", err)
+	}
+	powerBar := dispPower.Tabs[0].Bars[3]
+	if powerBar.ID != "power_draw" {
+		t.Fatalf("expected power_draw bar, got %+v", powerBar)
+	}
+	if powerBar.Value != 16.0 || powerBar.Max != 20.0 {
+		t.Errorf("expected powerBar value 16.0, max 20.0, got value=%f, max=%f", powerBar.Value, powerBar.Max)
+	}
+	if powerBar.Label != "Power Draw (16.0 / 20.0 MW)" {
+		t.Errorf("expected label 'Power Draw (16.0 / 20.0 MW)', got %q", powerBar.Label)
+	}
+	// Status KeyValue
+	statusTab := dispPower.Tabs[1]
+	currentUsageKV := statusTab.KeyValues[3]
+	if currentUsageKV.Key != "Current Usage" || currentUsageKV.Value != "16.0 MW (80%)" {
+		t.Errorf("expected Current Usage '16.0 MW (80%%)', got %+v", currentUsageKV)
+	}
+	maxDeployedKV := statusTab.KeyValues[4]
+	if maxDeployedKV.Key != "Max Deployed" || maxDeployedKV.Value != "23.0 MW" {
+		t.Errorf("expected Max Deployed '23.0 MW', got %+v", maxDeployedKV)
+	}
+
+	// Ship readout consolidated screen power bar
+	dispShip := state.BuildShipDisplay()
+	shipPowerBar := dispShip.Tabs[1].Bars[3]
+	if shipPowerBar.Value != 16.0 || shipPowerBar.Label != "Power Draw (16.0 / 20.0 MW)" {
+		t.Errorf("expected ship screen powerBar value 16.0, got value=%f, label=%s", shipPowerBar.Value, shipPowerBar.Label)
+	}
+}
+
+func TestPowerUsage_TierZeroBrownout(t *testing.T) {
+	pc := NewPriceCache(filepath.Join(t.TempDir(), "prices.json"))
+	state := NewShipState(pc)
+
+	// Tier 0 alone exceeds plant capacity: Thrusters 12.0 MW
+	loadout := elite.EventLoadout{
+		Timestamp: time.Now(),
+		Event:     "Loadout",
+		Ship:      "python",
+		Modules: []elite.LoadoutModule{
+			{Slot: "MainEngines", Item: "int_engine_size7_class5", Health: 1.0, On: true, Priority: 0},
+			{Slot: "Slot01_Size6", Item: "int_shieldgenerator_size6_class5", Health: 1.0, On: true, Priority: 1},
+		},
+	}
+	state.HandleJournalEntry(elite.JournalEntry{Event: "Loadout", Data: &loadout})
+	state.PowerPlantCapacity = 10.0
+
+	modInfo := elite.ModuleInfoSnapshot{
+		Modules: []elite.ModuleInfoEntry{
+			{Slot: "MainEngines", Item: "int_engine_size7_class5", Power: 12.0, Priority: 0},
+			{Slot: "Slot01_Size6", Item: "int_shieldgenerator_size6_class5", Power: 5.0, Priority: 1},
+		},
+	}
+	state.HandleModuleInfo(modInfo)
+
+	currentUsage, maxUsage := state.CalculatePowerUsage()
+	// Rule: "If even tier 0 exceeds capacity, currentUsage is tier 0 power."
+	if currentUsage != 12.0 {
+		t.Fatalf("expected currentUsage 12.0 MW when tier 0 brownouts, got %f", currentUsage)
+	}
+	if maxUsage != 17.0 {
+		t.Fatalf("expected maxUsage 17.0 MW, got %f", maxUsage)
+	}
+
+	disp := state.BuildPowerDisplay()
+	powerBar := disp.Tabs[0].Bars[3]
+	if powerBar.Color != display.PaletteCrit {
+		t.Errorf("expected PaletteCrit for brownout, got %s", powerBar.Color)
+	}
+}
+
+func TestPowerUsage_HardpointRetractionAndDeployment(t *testing.T) {
+	pc := NewPriceCache(filepath.Join(t.TempDir(), "prices.json"))
+	state := NewShipState(pc)
+
+	loadout := elite.EventLoadout{
+		Timestamp: time.Now(),
+		Event:     "Loadout",
+		Ship:      "python",
+		Modules: []elite.LoadoutModule{
+			{Slot: "MainEngines", Item: "int_engine_size7_class5", Health: 1.0, On: true, Priority: 0},
+			{Slot: "Slot01_Size5", Item: "int_shieldgenerator_size5_class5", Health: 1.0, On: true, Priority: 1},
+			{Slot: "TinyHardpoint1", Item: "hpt_shieldbooster_size0_class5", Health: 1.0, On: true, Priority: 1},
+			{Slot: "HugeHardpoint1", Item: "hpt_multicannon_gimbal_huge", Health: 1.0, On: true, Priority: 1},
+			{Slot: "MediumHardpoint1", Item: "hpt_beamlaser_gimbal_medium", Health: 1.0, On: true, Priority: 2},
+			{Slot: "Slot02_Size5", Item: "int_cargorack_size5_class1", Health: 1.0, On: true, Priority: 2},
+		},
+	}
+	state.HandleJournalEntry(elite.JournalEntry{Event: "Loadout", Data: &loadout})
+	state.PowerPlantCapacity = 16.0
+
+	modInfo := elite.ModuleInfoSnapshot{
+		Modules: []elite.ModuleInfoEntry{
+			{Slot: "MainEngines", Item: "int_engine_size7_class5", Power: 8.0, Priority: 0},
+			{Slot: "Slot01_Size5", Item: "int_shieldgenerator_size5_class5", Power: 5.0, Priority: 1},
+			{Slot: "TinyHardpoint1", Item: "hpt_shieldbooster_size0_class5", Power: 1.2, Priority: 1},
+			{Slot: "HugeHardpoint1", Item: "hpt_multicannon_gimbal_huge", Power: 4.0, Priority: 1},
+			{Slot: "MediumHardpoint1", Item: "hpt_beamlaser_gimbal_medium", Power: 2.0, Priority: 2},
+			{Slot: "Slot02_Size5", Item: "int_cargorack_size5_class1", Power: 2.0, Priority: 2},
+		},
+	}
+	state.HandleModuleInfo(modInfo)
+
+	// 1. Hardpoints Retracted (FlagHardpointsDeployed not set)
+	statusRetracted := elite.StatusSnapshot{
+		Flags: elite.FlagInMainShip,
+	}
+	changed := state.HandleStatus(statusRetracted)
+	if !changed && state.HardpointsDeployed {
+		t.Fatalf("expected state.HardpointsDeployed == false")
+	}
+	if state.HardpointsDeployed {
+		t.Fatalf("expected HardpointsDeployed false")
+	}
+
+	// In retraction:
+	// HugeHardpoint1 and MediumHardpoint1 draw 0 MW.
+	// TinyHardpoint1 (utility) draws 1.2 MW.
+	// Tier 0: 8.0 MW (cum: 8.0 <= 16.0) -> powered
+	// Tier 1: 5.0 (shield) + 1.2 (booster) = 6.2 MW (cum: 14.2 <= 16.0) -> powered
+	// Tier 2: 2.0 (cargo/rack) = 2.0 MW (cum: 16.2 > 16.0) -> shed!
+	currentUsage, maxUsage := state.CalculatePowerUsage()
+	if math.Abs(currentUsage-14.2) > 0.001 {
+		t.Fatalf("expected currentUsage 14.2 MW when hardpoints retracted, got %f", currentUsage)
+	}
+	if math.Abs(maxUsage-22.2) > 0.001 {
+		t.Fatalf("expected maxUsage 22.2 MW, got %f", maxUsage)
+	}
+
+	dispRetracted := state.BuildPowerDisplay()
+	barRetracted := dispRetracted.Tabs[0].Bars[3]
+	if math.Abs(barRetracted.Value-14.2) > 0.001 || barRetracted.Label != "Power Draw (14.2 / 16.0 MW)" {
+		t.Errorf("unexpected power bar when retracted: %+v", barRetracted)
+	}
+
+	// 2. Hardpoints Deployed (FlagHardpointsDeployed set)
+	statusDeployed := elite.StatusSnapshot{
+		Flags: elite.FlagInMainShip | elite.FlagHardpointsDeployed,
+	}
+	changed2 := state.HandleStatus(statusDeployed)
+	if !changed2 {
+		t.Fatalf("expected HandleStatus to return true when hardpoints deploy")
+	}
+	if !state.HardpointsDeployed {
+		t.Fatalf("expected HardpointsDeployed true")
+	}
+
+	// On deployment:
+	// HugeHardpoint1 (4.0 MW) demands power at Tier 1.
+	// MediumHardpoint1 (2.0 MW) demands power at Tier 2.
+	// Tier 0: 8.0 MW (cum: 8.0 <= 16.0) -> powered
+	// Tier 1: 5.0 (shield) + 1.2 (booster) + 4.0 (weapons) = 10.2 MW.
+	// Cum: 8.0 + 10.2 = 18.2 > 16.0 MW -> Tier 1 exceeds capacity!
+	// Both Tier 1 and Tier 2 shed!
+	// currentUsage = 8.0 MW (only Tier 0 powered).
+	currentDeployed, maxDeployed := state.CalculatePowerUsage()
+	if currentDeployed != 8.0 {
+		t.Fatalf("expected currentUsage 8.0 MW after priority shedding on deployment, got %f", currentDeployed)
+	}
+	if math.Abs(maxDeployed-22.2) > 0.001 {
+		t.Fatalf("expected maxUsage 22.2 MW, got %f", maxDeployed)
+	}
+
+	dispDeployed := state.BuildPowerDisplay()
+	barDeployed := dispDeployed.Tabs[0].Bars[3]
+	if barDeployed.Value != 8.0 || barDeployed.Label != "Power Draw (8.0 / 16.0 MW)" {
+		t.Errorf("unexpected power bar when deployed: %+v", barDeployed)
+	}
+}
+
+func TestPowerUsage_PriorityZeroIndexing(t *testing.T) {
+	pc := NewPriceCache(filepath.Join(t.TempDir(), "prices.json"))
+	state := NewShipState(pc)
+
+	// Verify HandleModuleInfo updates Priority 0
+	state.Modules = []ShipModule{
+		{Slot: "MainEngines", Item: "int_engine_size7_class5", Health: 1.0, On: true, Priority: 3},
+		{Slot: "HugeHardpoint1", Item: "hpt_multicannon_gimbal_huge", Health: 1.0, On: true, Priority: 3},
+	}
+
+	modInfo := elite.ModuleInfoSnapshot{
+		Modules: []elite.ModuleInfoEntry{
+			{Slot: "MainEngines", Item: "int_engine_size7_class5", Power: 10.0, Priority: 0},
+			{Slot: "HugeHardpoint1", Item: "hpt_multicannon_gimbal_huge", Power: 2.0, Priority: 1},
+		},
+	}
+	changed := state.HandleModuleInfo(modInfo)
+	if !changed {
+		t.Fatalf("expected HandleModuleInfo to return true")
+	}
+	if state.Modules[0].Priority != 0 {
+		t.Errorf("expected MainEngines priority updated to 0, got %d", state.Modules[0].Priority)
+	}
+	if state.Modules[1].Priority != 1 {
+		t.Errorf("expected HugeHardpoint1 priority updated to 1, got %d", state.Modules[1].Priority)
+	}
+
+	// Verify EventLoadout with pre-existing ModuleInfo preserves Priority 0
+	loadout := elite.EventLoadout{
+		Timestamp: time.Now(),
+		Event:     "Loadout",
+		Ship:      "python",
+		Modules: []elite.LoadoutModule{
+			{Slot: "MainEngines", Item: "int_engine_size7_class5", Health: 1.0, On: true, Priority: 4},
+		},
+	}
+	state.HandleJournalEntry(elite.JournalEntry{Event: "Loadout", Data: &loadout})
+	if state.Modules[0].Priority != 0 {
+		t.Errorf("expected EventLoadout to attach ModuleInfo priority 0, got %d", state.Modules[0].Priority)
+	}
+}
+

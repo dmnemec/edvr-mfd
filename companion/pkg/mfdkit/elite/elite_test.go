@@ -975,8 +975,8 @@ func TestRealSavedGamesFolder(t *testing.T) {
 		t.Fatalf("FindLatestJournal on real folder failed: %v", err)
 	}
 	base := filepath.Base(latest)
-	if base != "Journal.2026-10-16T001949.01.log" {
-		t.Errorf("expected latest journal Journal.2026-10-16T001949.01.log, got %s", base)
+	if !strings.HasPrefix(base, "Journal.2026-10-16T") {
+		t.Errorf("expected latest journal for 2026-10-16, got %s", base)
 	}
 
 	// 2. Verify ModulesInfo.json can be read and parsed

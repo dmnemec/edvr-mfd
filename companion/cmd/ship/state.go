@@ -41,10 +41,11 @@ type ShipState struct {
 	Modules       []ShipModule
 
 	// Status.json
-	Pips        elite.Pips
-	Fuel        elite.StatusFuel
-	Overheating bool
-	LowFuel     bool
+	Pips               elite.Pips
+	Fuel               elite.StatusFuel
+	Overheating        bool
+	LowFuel            bool
+	HardpointsDeployed bool
 
 	// Cargo.json
 	Cargo *elite.CargoSnapshot
@@ -122,9 +123,7 @@ func (s *ShipState) HandleJournalEntry(entry elite.JournalEntry) (modulesChanged
 			if s.ModuleInfo != nil {
 				if info := s.ModuleInfo.FindSlot(m.Slot); info != nil {
 					mod.PowerDraw = info.Power
-					if info.Priority > 0 {
-						mod.Priority = info.Priority
-					}
+					mod.Priority = info.Priority
 				}
 			}
 
@@ -253,13 +252,15 @@ func (s *ShipState) HandleStatus(snap elite.StatusSnapshot) bool {
 	fuelChanged := s.Fuel != snap.Fuel
 	overheatingChanged := s.Overheating != snap.Overheating()
 	lowFuelChanged := s.LowFuel != snap.LowFuel()
+	hardpointsChanged := s.HardpointsDeployed != snap.HardpointsDeployed()
 
 	s.Pips = snap.Pips
 	s.Fuel = snap.Fuel
 	s.Overheating = snap.Overheating()
 	s.LowFuel = snap.LowFuel()
+	s.HardpointsDeployed = snap.HardpointsDeployed()
 
-	return pipsChanged || fuelChanged || overheatingChanged || lowFuelChanged
+	return pipsChanged || fuelChanged || overheatingChanged || lowFuelChanged || hardpointsChanged
 }
 
 // HandleCargo updates inventory from Cargo.json.
@@ -294,15 +295,72 @@ func (s *ShipState) HandleModuleInfo(snap elite.ModuleInfoSnapshot) bool {
 		if entry := snap.FindSlot(s.Modules[i].Slot); entry != nil {
 			if s.Modules[i].PowerDraw != entry.Power || s.Modules[i].Priority != entry.Priority {
 				s.Modules[i].PowerDraw = entry.Power
-				if entry.Priority > 0 {
-					s.Modules[i].Priority = entry.Priority
-				}
+				s.Modules[i].Priority = entry.Priority
 				changed = true
 			}
 		}
 	}
 
 	return changed
+}
+
+// CalculatePowerUsage returns (currentUsage, maxUsage) considering hardpoints and priority shedding.
+func (s *ShipState) CalculatePowerUsage() (currentUsage, maxUsage float64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.calculatePowerUsageLocked()
+}
+
+func (s *ShipState) calculatePowerUsageLocked() (currentUsage, maxUsage float64) {
+	capacity := s.PowerPlantCapacity
+	if capacity <= 0 {
+		capacity = 15.0
+	}
+
+	var tierPower [5]float64
+	for _, m := range s.Modules {
+		if !m.On {
+			continue
+		}
+		maxUsage += m.PowerDraw
+
+		demand := m.PowerDraw
+		if SlotGroup(m.Slot) == SlotGroupHardpoint && !strings.HasPrefix(strings.ToLower(m.Slot), "tiny") {
+			if !s.HardpointsDeployed {
+				demand = 0.0
+			}
+		}
+		if demand <= 0 {
+			continue
+		}
+
+		tier := m.Priority
+		if tier < 0 {
+			tier = 0
+		} else if tier > 4 {
+			tier = 4
+		}
+		tierPower[tier] += demand
+	}
+
+	cumulativePower := 0.0
+	for tier := 0; tier < 5; tier++ {
+		tp := tierPower[tier]
+		if tp == 0 {
+			continue
+		}
+		if cumulativePower+tp <= capacity+1e-6 {
+			cumulativePower += tp
+			currentUsage += tp
+		} else {
+			if tier == 0 || cumulativePower == 0 {
+				currentUsage = tp
+			}
+			break
+		}
+	}
+
+	return currentUsage, maxUsage
 }
 
 // BuildShipDisplay generates the consolidated display model for screens/ship.json (Ticket MFD-008).
@@ -399,12 +457,7 @@ func (s *ShipState) BuildShipDisplay() *display.Display {
 		capacity = 15.0
 	}
 
-	totalDraw := 0.0
-	for _, m := range s.Modules {
-		if m.On {
-			totalDraw += m.PowerDraw
-		}
-	}
+	currentUsage, _ := s.calculatePowerUsageLocked()
 
 	fuelMain := s.Fuel.FuelMain
 	fuelCapMain := s.FuelCapacity.Main
@@ -419,9 +472,9 @@ func (s *ShipState) BuildShipDisplay() *display.Display {
 	}
 
 	powerBarColor := display.PaletteOK
-	if totalDraw > capacity {
+	if currentUsage > capacity {
 		powerBarColor = display.PaletteCrit
-	} else if totalDraw > 0.90*capacity {
+	} else if currentUsage > 0.90*capacity {
 		powerBarColor = display.PaletteWarn
 	}
 
@@ -461,8 +514,8 @@ func (s *ShipState) BuildShipDisplay() *display.Display {
 			},
 			{
 				ID:    "power_draw",
-				Label: fmt.Sprintf("Power Draw (%.1f / %.1f MW)", totalDraw, capacity),
-				Value: totalDraw,
+				Label: fmt.Sprintf("Power Draw (%.1f / %.1f MW)", currentUsage, capacity),
+				Value: currentUsage,
 				Max:   capacity,
 				Color: powerBarColor,
 			},
@@ -810,12 +863,7 @@ func (s *ShipState) BuildPowerDisplay() *display.Display {
 		capacity = 15.0
 	}
 
-	totalDraw := 0.0
-	for _, m := range s.Modules {
-		if m.On {
-			totalDraw += m.PowerDraw
-		}
-	}
+	currentUsage, maxUsage := s.calculatePowerUsageLocked()
 
 	// Fuel values
 	fuelMain := s.Fuel.FuelMain
@@ -832,9 +880,9 @@ func (s *ShipState) BuildPowerDisplay() *display.Display {
 
 	// Tab 1: Pips & Gauges (bars)
 	powerBarColor := display.PaletteOK
-	if totalDraw > capacity {
+	if currentUsage > capacity {
 		powerBarColor = display.PaletteCrit
-	} else if totalDraw > 0.90*capacity {
+	} else if currentUsage > 0.90*capacity {
 		powerBarColor = display.PaletteWarn
 	}
 
@@ -874,8 +922,8 @@ func (s *ShipState) BuildPowerDisplay() *display.Display {
 			},
 			{
 				ID:    "power_draw",
-				Label: fmt.Sprintf("Power Draw (%.1f / %.1f MW)", totalDraw, capacity),
-				Value: totalDraw,
+				Label: fmt.Sprintf("Power Draw (%.1f / %.1f MW)", currentUsage, capacity),
+				Value: currentUsage,
 				Max:   capacity,
 				Color: powerBarColor,
 			},
@@ -916,11 +964,6 @@ func (s *ShipState) BuildPowerDisplay() *display.Display {
 		lowFuelColor = display.PaletteWarn
 	}
 
-	pct := 0.0
-	if capacity > 0 {
-		pct = (totalDraw / capacity) * 100.0
-	}
-
 	statusTab := display.Tab{
 		ID:    "status",
 		Title: "STATUS",
@@ -945,10 +988,16 @@ func (s *ShipState) BuildPowerDisplay() *display.Display {
 				ValueColor: lowFuelColor,
 			},
 			{
-				ID:         "power_usage",
-				Key:        "Power Usage",
-				Value:      fmt.Sprintf("%.1f / %.1f MW (%.0f%%)", totalDraw, capacity, pct),
+				ID:         "current_usage",
+				Key:        "Current Usage",
+				Value:      fmt.Sprintf("%.1f MW (%.0f%%)", currentUsage, currentUsage/capacity*100),
 				ValueColor: powerBarColor,
+			},
+			{
+				ID:         "max_deployed",
+				Key:        "Max Deployed",
+				Value:      fmt.Sprintf("%.1f MW", maxUsage),
+				ValueColor: display.PaletteNormal,
 			},
 			{
 				ID:         "power_plant",

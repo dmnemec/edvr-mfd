@@ -1,12 +1,16 @@
 # EDVR MFD — Issue & Bug Tracker
 
 ## Status
-- **Active Open Issues**: 0
-- **Resolved Issues**: 16
+- **Active Open Issues**: 3
+- **Resolved Issues**: 17
 - **Last Updated**: 2026-10-16
 - **Jump to Section**:
   - [Open Issues](#open-issues)
+    - [MFD-015: Media Player MFD with system media control (GSMTC) & HOTAS navigation](#mfd-015--media-player-mfd-with-system-media-control-gsmtc--hotas-navigation)
+    - [MFD-016: Dynamic companion-driven color overrides & state-reactive theming](#mfd-016--dynamic-companion-driven-color-overrides--state-reactive-theming)
+    - [MFD-017: Configurable MFD viewable size, aspect ratios, and compact layout templates](#mfd-017--configurable-mfd-viewable-size-aspect-ratios-and-compact-layout-templates)
   - [Resolved Issues](#resolved)
+    - [MFD-018: Power readout shows Max potential draw instead of Current active draw after priority shedding](#mfd-018--power-readout-shows-max-potential-draw-instead-of-current-active-draw-after-priority-shedding)
     - [MFD-014: System and Bio survey display verification after journal recovery](#mfd-014--system-and-bio-survey-display-verification-after-journal-recovery)
     - [MFD-013: Power tab shows 0MW used due to ModuleInfo.json pluralization mismatch](#mfd-013--power-tab-shows-0mw-used-due-to-moduleinfojson-pluralization-mismatch)
     - [MFD-012: Journal discovery selects stale 2022 journal due to ASCII string sorting](#mfd-012--journal-discovery-selects-stale-2022-journal-due-to-ascii-string-sorting)
@@ -28,11 +32,94 @@
 
 ## Open Issues
 
-*(No open issues)*
+### MFD-015 | Media Player MFD with system media control (GSMTC) & HOTAS navigation
+
+- **ID**: MFD-015
+- **Type**: Feature Request
+- **Created Date**: 2026-10-16
+- **Status**: Open
+- **Description**:
+  Provide an in-cockpit MFD for playback and control of external media players (Spotify, YouTube, browser playback, etc.) using Windows Global System Media Transport Controls (GSMTC) and synthetic key fallback (`VK_MEDIA_*`).
+- **Architecture & Technical Requirements**:
+  1. **Companion Process**: Implemented as a standalone Go companion executable (`companion/cmd/mediaplayer`).
+  2. **Metadata & Status Display**: Uses Windows WinRT GSMTC session APIs to capture current media track name, artist/channel, playback status (playing/paused), timeline/scrub position, and volume level into the `MfdViewModel` schema.
+  3. **VR-Accessible Controls**: Interactive action controls for Play/Pause, Next Track, Previous Track, Volume Up/Down, and Mute navigable entirely via cockpit HOTAS/joystick hat switches and keyboard navigation without breaking immersion or taking off the VR headset.
+  4. **Input Gating**: Router swallows all mapped navigation and action execution events while the media player MFD is focused to avoid leaking inputs to flight controls.
+- **Acceptance Criteria**:
+  - Live media sessions on Windows (Spotify, YouTube in Chrome/Edge, etc.) populate track title and artist in the MFD.
+  - Triggering Next/Prev/Play-Pause via MFD UI updates the external media session.
+  - No inputs leak to ship controls while interacting with media player buttons in VR.
 
 ---
 
+### MFD-016 | Dynamic companion-driven color overrides & state-reactive theming
+
+- **ID**: MFD-016
+- **Type**: Feature Request
+- **Created Date**: 2026-10-16
+- **Status**: Open
+- **Description**:
+  Enable companion packages to dynamically control MFD rendering colors based on real-time game telemetry (e.g. ship module integrity, combat state, hardpoints deployed, shield status) or scripted animations (e.g. cycling disco mode).
+- **Architecture & Technical Requirements**:
+  1. **View Model Schema Extension**: Extend the MFD schema and view model (`mfd_view_model.h` / companion JSON) to support dynamic color override fields (`dynamic_color`, `alert_mode`, `alert_color`).
+  2. **State Reactive Interpolation**:
+     - Implement smooth gradient transitions (e.g. lerping from default cockpit amber `(255, 110, 0)` down to warning red `(255, 30, 20)` in proportion to module health/integrity).
+     - Color returns cleanly to default theme upon module repair/restoration.
+  3. **Render Throttling & Animation Performance**:
+     - MFD dirty flagging and GPU upload frequency must be throttled to prevent VR frame pacing drops during rapid color transitions or disco animations.
+     - Build a prototype testing MFD specifically to evaluate upload tick rates (e.g., 10 Hz vs 30 Hz vs 60 Hz) to establish performance thresholds.
+  4. **Priority Hierarchy**: Dynamic game-state alerts can be configured to take priority over standard user color presets, while preserving user customization override when explicitly chosen.
+- **Acceptance Criteria**:
+  - Companion emitting a degraded integrity or alert status smoothly fades MFD accent and background colors toward alarm palettes.
+  - Rapid color transitions maintain 90+ FPS in VR without causing D3D11 device contention or micro-stutter.
+  - Restoring normal ship state seamlessly reverts the MFD back to the configured default theme.
+
+---
+
+### MFD-017 | Configurable MFD viewable size, aspect ratios, and compact layout templates
+
+- **ID**: MFD-017
+- **Type**: Feature Request
+- **Created Date**: 2026-10-16
+- **Status**: Open
+- **Description**:
+  Support custom physical dimensions (width and height in meters), customizable render aspect ratios, and compact layout templates for MFDs so displays can be thin horizontal bars (such as a compact media player banner) rather than fixed 4:3 rectangles.
+- **Architecture & Technical Requirements**:
+  1. **Manifest Sizing Declarations**:
+     - Extend `manifest.json` schema to allow packages to declare default physical dimensions (`width_m`, `height_m`) and render texture resolution (`render_width`, `render_height`).
+     - Example: Media player banner with `0.24m x 0.06m` physical quad and `512x128` pixel buffer.
+  2. **In-Cockpit Settings Customization**:
+     - Add Width and Height adjustment rows to the MFD Settings tab with "Default" and "Custom" modes.
+     - Custom mode exposes numeric/stepped adjustment sliders for physical quad dimensions (and corresponding render buffer dimensions).
+     - Includes a "Reset to Default" action matching the color settings pattern.
+  3. **Compact / Banner Layout Templates**:
+     - Provide layout templates (`"standard"`, `"compact_banner"`, `"minimal"`) in the rendering pipeline (`MfdRenderer`) so UI components (headers, tab bars, content items) reflow cleanly into horizontal banners without overlapping or clipping text.
+  4. **Compositor & D3D11 Pipeline Support**:
+     - Dynamically recreate or resize the D3D11 render target texture and OpenXR quad layer dimensions per screen instead of hardcoding uniform quad proportions.
+- **Acceptance Criteria**:
+  - A package can define a banner aspect ratio in its manifest and render with crisp non-distorted texels.
+  - Settings tab allows the user to adjust and reset MFD width and height live in the headset.
+  - Banner template displays media controls and status legibly within a condensed vertical space.
+
 ## Resolved
+
+### MFD-018 | Power readout shows Max potential draw instead of Current active draw after priority shedding
+
+- **ID**: MFD-018
+- **Discovered Date**: 2026-10-16
+- **Fixed Date**: 2026-10-16
+- **Root Cause**:
+  `BuildShipDisplay` and `BuildPowerDisplay` in `companion/cmd/ship/state.go` calculated power draw by summing all modules where `m.On == true` without accounting for hardpoint retraction state (`Status.json` bit 6) or ship power priority shedding (where lower priority tiers 5 down to 1 are disabled by the ship's computer when active power exceeds power plant capacity). Furthermore, `HandleModuleInfo` and `EventLoadout` guarded priority assignment with `entry.Priority > 0`, ignoring Priority 0 (which represents Priority 1 in Elite Dangerous). This caused the POWER tab to show max potential deployed draw rather than true current usage, displaying an over-limit CRIT red bar even when the ship was safely powered.
+- **Fix**:
+  1. Added `HardpointsDeployed bool` to `ShipState`, and helper method `HardpointsDeployed()` on `elite.StatusSnapshot` in `companion/pkg/mfdkit/elite/watchers.go`.
+  2. In `companion/cmd/ship/state.go`:
+     - Updated `HandleStatus` to track `snap.HardpointsDeployed()` and trigger re-render on changes.
+     - Fixed priority assignment in `HandleModuleInfo` and `EventLoadout` to properly update `Priority` even when `entry.Priority == 0`.
+     - Implemented `CalculatePowerUsage() (currentUsage, maxUsage float64)` to group active demanding modules by priority tier (accounting for 0 MW weapon draw when hardpoints are retracted) and simulate ship priority shedding up to power plant capacity.
+     - Updated `BuildShipDisplay()` and `BuildPowerDisplay()` to display `currentUsage` on the power bar and added `"Current Usage"` and `"Max Deployed"` KeyValues to the Power status tab.
+  3. Added comprehensive unit tests in `companion/cmd/ship/ship_test.go` covering priority shedding, hardpoint retraction/deployment, tier 0 brownout, and priority 0 indexing.
+
+---
 
 ### MFD-014 | System and Bio survey display verification after journal recovery
 
