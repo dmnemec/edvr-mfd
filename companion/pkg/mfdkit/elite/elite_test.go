@@ -231,6 +231,16 @@ func TestStronglyTypedEventsParsing(t *testing.T) {
 			},
 		},
 		{
+			name: "JetConeBoost",
+			jsonLine: `{"timestamp":"2026-10-16T12:00:00Z","event":"JetConeBoost","BoostValue":4.0}`,
+			check: func(t *testing.T, entry JournalEntry) {
+				ev, ok := entry.Data.(*EventJetConeBoost)
+				if !ok || ev.BoostValue != 4.0 {
+					t.Errorf("mismatched JetConeBoost: %+v", entry.Data)
+				}
+			},
+		},
+		{
 			name: "CarrierJump",
 			jsonLine: `{"timestamp":"2026-10-15T12:16:00Z","event":"CarrierJump","StarSystem":"Colonia","SystemAddress":12345678,"StarPos":[1.0,2.0,3.0]}`,
 			check: func(t *testing.T, entry JournalEntry) {
@@ -832,5 +842,168 @@ func TestWatcher_WriteRaceRetryRecovery(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("watcher failed to recover from partial write race")
+	}
+}
+
+func TestDiscovery_LegacyJournalOrdering(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Legacy 2022 journals: Journal.YYMMDDHHMMSS.01.log
+	legacy1 := filepath.Join(tempDir, "Journal.220512101952.01.log")
+	legacy2 := filepath.Join(tempDir, "Journal.221117191657.01.log")
+
+	// Modern 2026 journals: Journal.YYYY-MM-DDTHHMMSS.01.log
+	modern1 := filepath.Join(tempDir, "Journal.2026-10-15T224255.01.log")
+	modern2 := filepath.Join(tempDir, "Journal.2026-10-16T001949.01.log")
+
+	// Write files
+	if err := os.WriteFile(legacy1, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy2, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modern1, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modern2, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set modification times reflecting their real creation dates
+	tLegacy1 := time.Date(2022, time.May, 13, 17, 58, 31, 0, time.UTC)
+	tLegacy2 := time.Date(2022, time.November, 18, 9, 0, 56, 0, time.UTC)
+	tModern1 := time.Date(2026, time.October, 15, 23, 3, 18, 0, time.UTC)
+	tModern2 := time.Date(2026, time.October, 16, 0, 50, 5, 0, time.UTC)
+
+	_ = os.Chtimes(legacy1, tLegacy1, tLegacy1)
+	_ = os.Chtimes(legacy2, tLegacy2, tLegacy2)
+	_ = os.Chtimes(modern1, tModern1, tModern1)
+	_ = os.Chtimes(modern2, tModern2, tModern2)
+
+	files, err := ListJournalFiles(tempDir)
+	if err != nil {
+		t.Fatalf("ListJournalFiles failed: %v", err)
+	}
+	if len(files) != 4 {
+		t.Fatalf("expected 4 files, got %d", len(files))
+	}
+
+	// Modern journal must be latest, legacy journals must come first
+	if files[0] != legacy1 || files[1] != legacy2 || files[2] != modern1 || files[3] != modern2 {
+		t.Fatalf("unexpected chronological order: %v", files)
+	}
+
+	latest, err := FindLatestJournal(tempDir)
+	if err != nil {
+		t.Fatalf("FindLatestJournal failed: %v", err)
+	}
+	if latest != modern2 {
+		t.Fatalf("expected latest journal to be %q, got %q", modern2, latest)
+	}
+}
+
+func TestWatchModuleInfo_PluralAndFallback(t *testing.T) {
+	tempDir := t.TempDir()
+	pluralPath := filepath.Join(tempDir, "ModulesInfo.json")
+
+	modulesJSON := `{
+		"timestamp": "2026-10-16T05:46:00Z",
+		"event": "ModuleInfo",
+		"Modules": [
+			{"Slot": "HugeHardpoint1", "Item": "hpt_multicannon_gimbal_huge", "Power": 1.22, "Priority": 1},
+			{"Slot": "MainEngines", "Item": "int_engine_size7_class5", "Power": 10.21, "Priority": 0}
+		]
+	}`
+	if err := os.WriteFile(pluralPath, []byte(modulesJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test resolveSnapshotPath on directory with ModulesInfo.json
+	resolved := resolveSnapshotPath(tempDir, "ModuleInfo.json")
+	if resolved != pluralPath {
+		t.Fatalf("expected resolveSnapshotPath to resolve to %q, got %q", pluralPath, resolved)
+	}
+
+	// Test ReadModuleInfo on singular path falls back to plural
+	singularPath := filepath.Join(tempDir, "ModuleInfo.json")
+	snap, err := ReadModuleInfo(singularPath)
+	if err != nil {
+		t.Fatalf("ReadModuleInfo fallback failed: %v", err)
+	}
+	if len(snap.Modules) != 2 {
+		t.Fatalf("expected 2 modules, got %d", len(snap.Modules))
+	}
+
+	// Test WatchModuleInfo watching tempDir picks up ModulesInfo.json
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	modCh, _ := WatchModuleInfo(ctx, tempDir, WithWatchPollInterval(10*time.Millisecond))
+	select {
+	case s := <-modCh:
+		entry := s.FindSlot("hugehardpoint1")
+		if entry == nil || entry.Power != 1.22 {
+			t.Fatalf("unexpected entry: %+v", entry)
+		}
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for ModulesInfo.json watcher")
+	}
+}
+
+func TestRealSavedGamesFolder(t *testing.T) {
+	candidateDirs := []string{
+		`C:\Users\csasn\Saved Games\Frontier Developments\Elite Dangerous`,
+		`/mnt/c/Users/csasn/Saved Games/Frontier Developments/Elite Dangerous`,
+	}
+
+	var savedGamesDir string
+	for _, d := range candidateDirs {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+			savedGamesDir = d
+			break
+		}
+	}
+
+	if savedGamesDir == "" {
+		t.Skip("skipping real saved games test: directory not found")
+	}
+
+	// 1. Verify FindLatestJournal finds Journal.2026-10-16T001949.01.log
+	latest, err := FindLatestJournal(savedGamesDir)
+	if err != nil {
+		t.Fatalf("FindLatestJournal on real folder failed: %v", err)
+	}
+	base := filepath.Base(latest)
+	if base != "Journal.2026-10-16T001949.01.log" {
+		t.Errorf("expected latest journal Journal.2026-10-16T001949.01.log, got %s", base)
+	}
+
+	// 2. Verify ModulesInfo.json can be read and parsed
+	modPath := filepath.Join(savedGamesDir, "ModulesInfo.json")
+	snap, err := ReadModuleInfo(modPath)
+	if err != nil {
+		t.Fatalf("ReadModuleInfo on real ModulesInfo.json failed: %v", err)
+	}
+	if len(snap.Modules) == 0 {
+		t.Fatalf("expected non-empty modules from real ModulesInfo.json")
+	}
+	t.Logf("Successfully parsed real ModulesInfo.json: %d modules found (timestamp %v)", len(snap.Modules), snap.Timestamp)
+
+	// 3. Verify WatchModuleInfo works on the real Saved Games directory
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	modCh, errCh := WatchModuleInfo(ctx, savedGamesDir, WithWatchPollInterval(10*time.Millisecond))
+	select {
+	case snap := <-modCh:
+		if len(snap.Modules) == 0 {
+			t.Errorf("WatchModuleInfo emitted empty modules")
+		}
+		t.Logf("WatchModuleInfo successfully emitted snapshot with %d modules", len(snap.Modules))
+	case err := <-errCh:
+		t.Fatalf("WatchModuleInfo emitted error: %v", err)
+	case <-ctx.Done():
+		t.Fatalf("WatchModuleInfo timed out on real Saved Games folder")
 	}
 }

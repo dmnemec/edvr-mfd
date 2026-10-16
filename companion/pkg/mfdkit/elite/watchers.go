@@ -376,8 +376,37 @@ func defaultWatcherConfig() watcherConfig {
 
 func resolveSnapshotPath(dirOrFile string, filename string) string {
 	if strings.HasSuffix(strings.ToLower(dirOrFile), ".json") {
+		// If dirOrFile is an explicit file path that doesn't exist, check for sibling alternate (ModuleInfo <-> ModulesInfo)
+		if _, err := os.Stat(dirOrFile); os.IsNotExist(err) {
+			dir := filepath.Dir(dirOrFile)
+			base := filepath.Base(dirOrFile)
+			if strings.EqualFold(base, "ModuleInfo.json") {
+				plural := filepath.Join(dir, "ModulesInfo.json")
+				if _, statErr := os.Stat(plural); statErr == nil {
+					return plural
+				}
+			} else if strings.EqualFold(base, "ModulesInfo.json") {
+				singular := filepath.Join(dir, "ModuleInfo.json")
+				if _, statErr := os.Stat(singular); statErr == nil {
+					return singular
+				}
+			}
+		}
 		return dirOrFile
 	}
+
+	// For module info snapshot, prefer ModulesInfo.json (plural) if it exists, otherwise ModuleInfo.json (singular)
+	if strings.EqualFold(filename, "ModuleInfo.json") || strings.EqualFold(filename, "ModulesInfo.json") {
+		plural := filepath.Join(dirOrFile, "ModulesInfo.json")
+		if _, err := os.Stat(plural); err == nil {
+			return plural
+		}
+		singular := filepath.Join(dirOrFile, "ModuleInfo.json")
+		if _, err := os.Stat(singular); err == nil {
+			return singular
+		}
+	}
+
 	return filepath.Join(dirOrFile, filename)
 }
 
@@ -438,9 +467,26 @@ func ReadNavRoute(path string) (NavRouteSnapshot, error) {
 	return snap, nil
 }
 
-// ReadModuleInfo reads and parses ModuleInfo.json from the specified path.
+// ReadModuleInfo reads and parses ModuleInfo.json or ModulesInfo.json from the specified path.
 func ReadModuleInfo(path string) (ModuleInfoSnapshot, error) {
 	data, err := os.ReadFile(path)
+	if err != nil && os.IsNotExist(err) {
+		dir := filepath.Dir(path)
+		base := filepath.Base(path)
+		if strings.EqualFold(base, "ModuleInfo.json") {
+			altPath := filepath.Join(dir, "ModulesInfo.json")
+			if altData, altErr := os.ReadFile(altPath); altErr == nil {
+				data = altData
+				err = nil
+			}
+		} else if strings.EqualFold(base, "ModulesInfo.json") {
+			altPath := filepath.Join(dir, "ModuleInfo.json")
+			if altData, altErr := os.ReadFile(altPath); altErr == nil {
+				data = altData
+				err = nil
+			}
+		}
+	}
 	if err != nil {
 		return ModuleInfoSnapshot{}, err
 	}
@@ -622,13 +668,21 @@ func WatchNavRoute(ctx context.Context, dirOrFile string, opts ...WatcherOption)
 	return outCh, errCh
 }
 
-// WatchModuleInfo watches ModuleInfo.json in dirOrFile and emits updates when changed.
+// WatchModuleInfo watches ModulesInfo.json (or ModuleInfo.json fallback) in dirOrFile and emits updates when changed.
 func WatchModuleInfo(ctx context.Context, dirOrFile string, opts ...WatcherOption) (<-chan ModuleInfoSnapshot, <-chan error) {
 	cfg := defaultWatcherConfig()
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	path := resolveSnapshotPath(dirOrFile, "ModuleInfo.json")
+
+	target := "ModuleInfo.json"
+	if !strings.HasSuffix(strings.ToLower(dirOrFile), ".json") {
+		if _, err := os.Stat(filepath.Join(dirOrFile, "ModulesInfo.json")); err == nil {
+			target = "ModulesInfo.json"
+		}
+	}
+
+	path := resolveSnapshotPath(dirOrFile, target)
 	outCh := make(chan ModuleInfoSnapshot, 32)
 	errCh := make(chan error, 16)
 	go watchFileLoop(ctx, path, cfg, ReadModuleInfo, outCh, errCh)

@@ -226,6 +226,19 @@ func (s *ShipState) HandleJournalEntry(entry elite.JournalEntry) (modulesChanged
 			s.lastIntegrityHash = currentHash
 			modulesChanged = true
 		}
+
+	case *elite.EventJetConeBoost:
+		for i := range s.Modules {
+			if strings.EqualFold(s.Modules[i].Slot, "FrameShiftDrive") || strings.Contains(strings.ToLower(s.Modules[i].Item), "hyperdrive") {
+				s.Modules[i].Health = math.Max(0.0, s.Modules[i].Health-0.01)
+				break
+			}
+		}
+		currentHash := s.ComputeIntegrityHash()
+		if currentHash != s.lastIntegrityHash {
+			s.lastIntegrityHash = currentHash
+			modulesChanged = true
+		}
 	}
 
 	return modulesChanged, powerChanged, cargoChanged

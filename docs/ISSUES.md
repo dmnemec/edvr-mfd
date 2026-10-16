@@ -2,11 +2,15 @@
 
 ## Status
 - **Active Open Issues**: 0
-- **Resolved Issues**: 12
-- **Last Updated**: 2026-10-15
+- **Resolved Issues**: 16
+- **Last Updated**: 2026-10-16
 - **Jump to Section**:
   - [Open Issues](#open-issues)
   - [Resolved Issues](#resolved)
+    - [MFD-014: System and Bio survey display verification after journal recovery](#mfd-014--system-and-bio-survey-display-verification-after-journal-recovery)
+    - [MFD-013: Power tab shows 0MW used due to ModuleInfo.json pluralization mismatch](#mfd-013--power-tab-shows-0mw-used-due-to-moduleinfojson-pluralization-mismatch)
+    - [MFD-012: Journal discovery selects stale 2022 journal due to ASCII string sorting](#mfd-012--journal-discovery-selects-stale-2022-journal-due-to-ascii-string-sorting)
+    - [MFD-011: FSD integrity not reporting reduced after neutron/white dwarf jumps](#mfd-011--fsd-integrity-not-reporting-reduced-after-neutronwhite-dwarf-jumps)
     - [MFD-009: Color preset name 1-off when scrolling in Settings tab](#mfd-009--color-preset-name-1-off-when-scrolling-in-settings-tab)
     - [MFD-010: List row subtext overlaps main text due to insufficient row height and font collision](#mfd-010--list-row-subtext-overlaps-main-text-due-to-insufficient-row-height-and-font-collision)
     - [MFD-008: Multi-screen packages render as separate 3D quads instead of consolidated multi-tab displays](#mfd-008--multi-screen-packages-render-as-separate-3d-quads-instead-of-consolidated-multi-tab-displays)
@@ -29,6 +33,57 @@
 ---
 
 ## Resolved
+
+### MFD-014 | System and Bio survey display verification after journal recovery
+
+- **ID**: MFD-014
+- **Discovered Date**: 2026-10-16
+- **Fixed Date**: 2026-10-16
+- **Root Cause**:
+  Coupled with MFD-012: because `TailJournal` was tailing a dormant 2022 journal file, all live `FSSDiscoveryScan`, `Scan`, and `ScanOrganic` events during flight never reached `companion/cmd/exploration`. The companion remained stuck on the 2022 checkpoint without ever populating live scanned bodies or organic samples.
+- **Fix**:
+  Resolved by fixing journal discovery in MFD-012. Tailing active journal files immediately restores live stream ingestion for FSS honks, celestial body scans, DSS probes, and exobiology genetic samplers.
+
+---
+
+### MFD-013 | Power tab shows 0MW used due to ModuleInfo.json pluralization mismatch
+
+- **ID**: MFD-013
+- **Discovered Date**: 2026-10-16
+- **Fixed Date**: 2026-10-16
+- **Root Cause**:
+  Elite Dangerous writes `ModulesInfo.json` (plural with an 's') in `%USERPROFILE%\Saved Games\Frontier Developments\Elite Dangerous`, while `companion/pkg/mfdkit/elite/watchers.go` exclusively watched `ModuleInfo.json` (singular). Power draw and priority data were never read, leaving module power at 0.0 MW on the POWER tab.
+- **Fix**:
+  1. Updated `WatchModuleInfo` and `resolveSnapshotPath` in `companion/pkg/mfdkit/elite/watchers.go` to inspect the journal directory for `ModulesInfo.json` and watch it, falling back to `ModuleInfo.json` if absent.
+  2. Updated `ReadModuleInfo` to support both plural and singular sibling filenames.
+  3. Added unit tests in `companion/pkg/mfdkit/elite/elite_test.go` and verified against the user's real `ModulesInfo.json` (43 modules parsed).
+
+---
+
+### MFD-012 | Journal discovery selects stale 2022 journal due to ASCII string sorting
+
+- **ID**: MFD-012
+- **Discovered Date**: 2026-10-16
+- **Fixed Date**: 2026-10-16
+- **Root Cause**:
+  In `companion/pkg/mfdkit/elite/discovery.go`, `ListJournalFiles` used `sort.Strings(files)`. Legacy journals named `Journal.221117191657.01.log` (YYMMDD format from 2022) sort after modern journals named `Journal.2026-10-16T001949.01.log` (YYYY-MM-DD format) because character `'2'` > `'0'`. As a result, `FindLatestJournal` picked the dormant 2022 journal, breaking live telemetry across all companions: the route planner stuck on `Alioth` (route[0]), exploration reported `Neto` (from 2022), and system/bio scans stayed empty.
+- **Fix**:
+  1. Updated `ListJournalFiles` to retrieve file modification times (`FileInfo.ModTime()`) and sort primarily by modification timestamp ascending, with secondary fallback to parsed journal timestamps (`ParseJournalTimestamp`), and tertiary fallback to filename strings.
+  2. Added unit tests in `companion/pkg/mfdkit/elite/elite_test.go` verifying legacy journal ordering and verified against the live player journal directory.
+
+### MFD-011 | FSD integrity not reporting reduced after neutron/white dwarf jumps
+
+- **ID**: MFD-011
+- **Discovered Date**: 2026-10-16
+- **Fixed Date**: 2026-10-16
+- **Root Cause**:
+  Elite Dangerous emits `JetConeBoost` with `BoostValue` when supercharging in a jet cone, inflicting 1% FSD damage, rather than emitting a full `Loadout` event. `companion/pkg/mfdkit/elite` did not parse `JetConeBoost` into strongly typed events, and `companion/cmd/ship/state.go` did not handle it, leaving FSD module integrity unchanged.
+- **Fix**:
+  1. Added `EventJetConeBoost` struct in `companion/pkg/mfdkit/elite/types.go` and handled `"JetConeBoost"` in `ParseJournalEntry`.
+  2. In `companion/cmd/ship/state.go`, added `*elite.EventJetConeBoost` case in `HandleJournalEntry` to locate the `FrameShiftDrive` (or item containing `"hyperdrive"`), decrement health by 0.01 (clamped at `math.Max(0.0, mod.Health - 0.01)`), recompute integrity hash, and set `modulesChanged = true`.
+  3. Added unit tests in `companion/cmd/ship/ship_test.go` and `companion/pkg/mfdkit/elite/elite_test.go`.
+
+---
 
 ### MFD-009 | Color preset name 1-off when scrolling in Settings tab
 

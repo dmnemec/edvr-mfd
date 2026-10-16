@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,8 +90,8 @@ func TestSeedFilesValidation(t *testing.T) {
 	if scr.Pose == nil || len(scr.Pose.Position) != 3 {
 		t.Fatalf("expected pose with 3 position coordinates, got %+v", scr.Pose)
 	}
-	// Left console pose: x=-0.28, y=-0.22, z=0.55, yaw=32, pitch=-22
-	if scr.Pose.Position[0] != -0.28 || scr.Pose.Position[1] != -0.22 || scr.Pose.Position[2] != 0.55 {
+	// Left console pose: x=-0.45, y=-0.22, z=-0.48, yaw=32, pitch=-22
+	if scr.Pose.Position[0] != -0.45 || scr.Pose.Position[1] != -0.22 || scr.Pose.Position[2] != -0.48 {
 		t.Errorf("unexpected pose position: %+v", scr.Pose.Position)
 	}
 	if scr.Pose.YawDeg != 32.0 || scr.Pose.PitchDeg != -22.0 {
@@ -259,6 +261,98 @@ func TestModulesScreen_DamageAndRepairEvents(t *testing.T) {
 	dispRepaired := state.BuildModulesDisplay()
 	if dispRepaired.StatusBadge.Text != "NOMINAL" {
 		t.Errorf("expected NOMINAL after repair, got %s", dispRepaired.StatusBadge.Text)
+	}
+}
+
+func TestJetConeBoost_FSDHealthReduction(t *testing.T) {
+	pc := NewPriceCache(filepath.Join(t.TempDir(), "prices.json"))
+	state := NewShipState(pc)
+
+	loadout := elite.EventLoadout{
+		Timestamp:  time.Now(),
+		Event:      "Loadout",
+		HullHealth: 1.0,
+		Modules: []elite.LoadoutModule{
+			{Slot: "PowerPlant", Item: "int_powerplant_size5_class5", Health: 1.0, On: true, Priority: 1},
+			{Slot: "FrameShiftDrive", Item: "int_hyperdrive_size6_class5", Health: 1.0, On: true, Priority: 1},
+		},
+	}
+	state.HandleJournalEntry(elite.JournalEntry{Event: "Loadout", Data: &loadout})
+
+	// Verify initial FSD health is 1.0
+	var initialFsdHealth float64
+	for _, m := range state.Modules {
+		if strings.EqualFold(m.Slot, "FrameShiftDrive") {
+			initialFsdHealth = m.Health
+			break
+		}
+	}
+	if initialFsdHealth != 1.0 {
+		t.Fatalf("expected initial FSD health 1.0, got %f", initialFsdHealth)
+	}
+
+	// 1. Feed EventJetConeBoost
+	boost := elite.EventJetConeBoost{BoostValue: 4.0}
+	modulesChanged, powerChanged, cargoChanged := state.HandleJournalEntry(elite.JournalEntry{
+		Event: "JetConeBoost",
+		Data:  &boost,
+	})
+
+	if !modulesChanged {
+		t.Fatalf("expected modulesChanged to be true on JetConeBoost")
+	}
+	if powerChanged || cargoChanged {
+		t.Errorf("expected only modulesChanged, got powerChanged=%v cargoChanged=%v", powerChanged, cargoChanged)
+	}
+
+	// Verify FSD health is reduced from 1.0 to 0.99
+	var fsdHealth float64
+	var found bool
+	for _, m := range state.Modules {
+		if strings.EqualFold(m.Slot, "FrameShiftDrive") {
+			fsdHealth = m.Health
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("FrameShiftDrive module not found")
+	}
+	if math.Abs(fsdHealth-0.99) > 1e-6 {
+		t.Fatalf("expected FSD health 0.99, got %f", fsdHealth)
+	}
+
+	// 2. Feed second EventJetConeBoost -> health 0.98
+	modChanged2, _, _ := state.HandleJournalEntry(elite.JournalEntry{
+		Event: "JetConeBoost",
+		Data:  &boost,
+	})
+	if !modChanged2 {
+		t.Fatalf("expected modulesChanged on second JetConeBoost")
+	}
+	for _, m := range state.Modules {
+		if strings.EqualFold(m.Slot, "FrameShiftDrive") {
+			fsdHealth = m.Health
+			break
+		}
+	}
+	if math.Abs(fsdHealth-0.98) > 1e-6 {
+		t.Fatalf("expected FSD health 0.98, got %f", fsdHealth)
+	}
+
+	// 3. Test clamping at 0.0
+	state.Modules[1].Health = 0.005
+	state.lastIntegrityHash = state.ComputeIntegrityHash()
+
+	modChanged3, _, _ := state.HandleJournalEntry(elite.JournalEntry{
+		Event: "JetConeBoost",
+		Data:  &boost,
+	})
+	if !modChanged3 {
+		t.Fatalf("expected modulesChanged when clamping to 0.0")
+	}
+	if state.Modules[1].Health != 0.0 {
+		t.Fatalf("expected FSD health clamped to 0.0, got %f", state.Modules[1].Health)
 	}
 }
 

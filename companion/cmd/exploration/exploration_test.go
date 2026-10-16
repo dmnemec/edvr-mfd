@@ -84,8 +84,8 @@ func TestSeedFilesValidation(t *testing.T) {
 	if scr.Pose == nil || len(scr.Pose.Position) != 3 {
 		t.Fatalf("expected pose with 3 position coordinates, got %+v", scr.Pose)
 	}
-	// Right console pose: x=0.28, y=-0.22, z=0.55, yaw=-32, pitch=-22
-	if scr.Pose.Position[0] != 0.28 || scr.Pose.Position[1] != -0.22 || scr.Pose.Position[2] != 0.55 {
+	// Right console pose: x=0.45, y=-0.22, z=-0.48, yaw=-32, pitch=-22
+	if scr.Pose.Position[0] != 0.45 || scr.Pose.Position[1] != -0.22 || scr.Pose.Position[2] != -0.48 {
 		t.Errorf("unexpected pose position: %+v", scr.Pose.Position)
 	}
 	if scr.Pose.YawDeg != -32.0 || scr.Pose.PitchDeg != -22.0 {

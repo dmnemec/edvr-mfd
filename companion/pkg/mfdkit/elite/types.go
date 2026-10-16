@@ -202,6 +202,11 @@ type EventModuleRetrieve struct {
 	Cost        int64     `json:"Cost,omitempty"`
 }
 
+// EventJetConeBoost is emitted when supercharging the Frame Shift Drive in a jet cone.
+type EventJetConeBoost struct {
+	BoostValue float64 `json:"BoostValue"`
+}
+
 // EventFSDJump is emitted when completing a Frame Shift Drive jump.
 type EventFSDJump struct {
 	Timestamp              time.Time  `json:"timestamp"`
@@ -619,6 +624,11 @@ func ParseJournalEntry(line []byte) (JournalEntry, error) {
 	// Navigation / Location
 	case "FSDJump":
 		var ev EventFSDJump
+		if err := json.Unmarshal(line, &ev); err == nil {
+			entry.Data = &ev
+		}
+	case "JetConeBoost":
+		var ev EventJetConeBoost
 		if err := json.Unmarshal(line, &ev); err == nil {
 			entry.Data = &ev
 		}
