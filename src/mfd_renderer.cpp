@@ -618,7 +618,15 @@ void MfdRenderer::renderTabs(const MfdViewModel& model, MfdColor mainColor, MfdC
 
 void MfdRenderer::renderListTab(const MfdTab& tab, bool focused, MfdColor mainColor, MfdColor dimColor) {
     int startY = 72;
-    int rowH = 26;
+    bool hasAnySublabel = false;
+    for (const auto& item : tab.items) {
+        if (!item.sublabel.empty()) {
+            hasAnySublabel = true;
+            break;
+        }
+    }
+
+    int rowH = hasAnySublabel ? 36 : 24;
     int maxRows = (m_height - startY - 34) / rowH;
     if (maxRows <= 0) maxRows = 1;
 
@@ -639,14 +647,17 @@ void MfdRenderer::renderListTab(const MfdTab& tab, bool focused, MfdColor mainCo
         if (isSelected) {
             if (focused) {
                 // Vibrant filled highlight for focused selection
-                drawRectFilled(14, y - 2, m_width - 28, rowH - 2, theme.brightColor);
+                drawRectFilled(14, y - 1, m_width - 28, rowH - 2, theme.brightColor);
             } else {
                 // Unfocused selection: subtle hollow outline
-                drawRect(14, y - 2, m_width - 28, rowH - 2, dimColor);
+                drawRect(14, y - 1, m_width - 28, rowH - 2, dimColor);
             }
         }
 
         int curX = 20;
+        int checkY = hasAnySublabel ? (y + 4) : (y + 6);
+        int iconY = hasAnySublabel ? (y + 3) : (y + 5);
+        int line1Y = hasAnySublabel ? (y + 2) : (y + 4);
 
         // 1. Checks array (0-6 small square boxes)
         if (!item.checks.empty()) {
@@ -663,7 +674,7 @@ void MfdRenderer::renderListTab(const MfdTab& tab, bool focused, MfdColor mainCo
                     dimCol = theme.dimColor;
                     bgCol = theme.bgColor;
                 }
-                drawCheck(curX, y + 4, chk, col, dimCol, bgCol, 10);
+                drawCheck(curX, checkY, chk, col, dimCol, bgCol, 10);
                 curX += 13;
             }
             curX += 2;
@@ -688,22 +699,47 @@ void MfdRenderer::renderListTab(const MfdTab& tab, bool focused, MfdColor mainCo
                     default:                   iconCol = mainColor; break;
                 }
             }
-            drawIcon(curX, y + 3, item.icon, iconCol, 12);
+            drawIcon(curX, iconY, item.icon, iconCol, 12);
             curX += 16;
         }
 
-        // 3. Label text
-        MfdColor lblCol = (isSelected && focused) ? invColor : mainColor;
-        drawText(curX, y + 1, item.label, lblCol, 1);
-
-        // 4. Sublabel text (aligned with label)
-        if (!item.sublabel.empty() && rowH >= 24) {
-            MfdColor subColor = (isSelected && focused) ? MfdColor(40, 25, 10, 255) : dimColor;
-            drawText(curX, y + 12, item.sublabel, subColor, 1);
+        // Calculate right side width first so label doesn't overwrite values
+        int rightX = m_width - 24;
+        int rightContentStart = rightX;
+        if (!item.value.empty()) {
+            rightContentStart -= static_cast<int>(item.value.size()) * 8 + 8;
+        }
+        if (!item.badge.empty()) {
+            rightContentStart -= (static_cast<int>(item.badge.size()) + 2) * 8 + 8;
         }
 
-        // 5. Value and Badge on right
-        int rightX = m_width - 24;
+        // 3. Label text (Line 1)
+        MfdColor lblCol = (isSelected && focused) ? invColor : mainColor;
+        int maxLabelW = rightContentStart - curX - 8;
+        std::string labelToDraw = item.label;
+        if (maxLabelW > 24) {
+            int maxChars = maxLabelW / 8;
+            if (static_cast<int>(labelToDraw.size()) > maxChars && maxChars > 3) {
+                labelToDraw = labelToDraw.substr(0, maxChars - 3) + "...";
+            }
+        }
+        drawText(curX, line1Y, labelToDraw, lblCol, 1);
+
+        // 4. Sublabel text (Line 2, cleanly separated with no overlap)
+        if (!item.sublabel.empty() && hasAnySublabel) {
+            MfdColor subColor = (isSelected && focused) ? invColor : dimColor;
+            int maxSubW = m_width - curX - 24;
+            std::string subToDraw = item.sublabel;
+            if (maxSubW > 24) {
+                int maxSubChars = maxSubW / 8;
+                if (static_cast<int>(subToDraw.size()) > maxSubChars && maxSubChars > 3) {
+                    subToDraw = subToDraw.substr(0, maxSubChars - 3) + "...";
+                }
+            }
+            drawText(curX, y + 19, subToDraw, subColor, 1);
+        }
+
+        // 5. Value and Badge on right (Line 1)
         if (!item.value.empty()) {
             MfdColor valCol;
             if (isSelected && focused) {
@@ -721,7 +757,7 @@ void MfdRenderer::renderListTab(const MfdTab& tab, bool focused, MfdColor mainCo
                     valCol = isSelected ? mainColor : dimColor;
                 }
             }
-            drawTextRight(rightX, y + 1, item.value, valCol, 1);
+            drawTextRight(rightX, line1Y, item.value, valCol, 1);
             rightX -= static_cast<int>(item.value.size()) * 8 + 8;
         }
 
@@ -735,7 +771,7 @@ void MfdRenderer::renderListTab(const MfdTab& tab, bool focused, MfdColor mainCo
                 badgeCol = item.badgeColor;
             }
             std::string bText = "[" + item.badge + "]";
-            drawTextRight(rightX, y + 1, bText, badgeCol, 1);
+            drawTextRight(rightX, line1Y, bText, badgeCol, 1);
         }
     }
 }

@@ -581,6 +581,19 @@ int test_schema_v1_renderer() {
     }
     TEST_CHECK(hasCritRed, "Status badge with crit color rendered AlertRed pixels");
 
+    // Test list rendering with sublabels (MFD-010): verify sublabel and label occupy separate pixel spans with 0 overlap
+    MfdViewModel listVm;
+    listVm.tabs.push_back(listTab);
+    renderer.render(listVm, 0.0f, MfdColorTheme::kDefaultAmber);
+    // Line 1 is at y=72+2=74..89; Line 2 sublabel is at y=72+19=91..106.
+    // Pixel row y=90 is the breathing gap between Line 1 and Line 2.
+    uint32_t bgPixel = renderer.pixelData()[90 * 512 + 0];
+    int gapPixels = 0;
+    for (int x = 60; x < 200; ++x) {
+        if (renderer.pixelData()[90 * 512 + x] != bgPixel) gapPixels++;
+    }
+    TEST_CHECK(gapPixels == 0, "MFD-010: Separation gap between Line 1 label and Line 2 sublabel has zero vertical overlap");
+
     return 0;
 }
 
@@ -2822,6 +2835,39 @@ int test_dynamic_screens_cap_and_settings() {
         CloseHandle(hEv);
         TEST_CHECK(evText.find("\"type\":\"select\"") != std::string::npos, "Event log recorded select");
         TEST_CHECK(evText.find("\"action\":\"clipboard\"") != std::string::npos, "Event log recorded action clipboard");
+    }
+
+    // 7. MFD-009: Test settings adjustment on "Preset Theme" updates key-values immediately
+    s0->theme = MfdColorTheme::kDefaultAmber;
+    mgr.update(headPos, headFwd, 0.016f);
+    auto& vm0 = s0->provider->viewModel();
+    int settingsIdx = -1;
+    for (size_t t = 0; t < vm0.tabs.size(); ++t) {
+        if (vm0.tabs[t].id == "__settings") {
+            settingsIdx = static_cast<int>(t);
+            break;
+        }
+    }
+    TEST_CHECK(settingsIdx >= 0, "Settings tab exists on screen 0");
+    if (settingsIdx >= 0) {
+        vm0.activeTabIndex = settingsIdx;
+        auto& stab = vm0.tabs[settingsIdx];
+        for (size_t k = 0; k < stab.keyValues.size(); ++k) {
+            if (stab.keyValues[k].key == "Preset Theme") {
+                stab.selectedIndex = static_cast<int>(k);
+                break;
+            }
+        }
+        s0->provider->onFocusChanged(true);
+        s0->provider->onInput(MfdInputAction::kRight);
+        std::string currentPresetName = "";
+        for (const auto& kv : stab.keyValues) {
+            if (kv.key == "Preset Theme") {
+                currentPresetName = kv.value;
+                break;
+            }
+        }
+        TEST_CHECK(currentPresetName == "Cyan / Ice", "MFD-009: Preset Theme key-value updated synchronously to 'Cyan / Ice'");
     }
 
     // Cleanup test files

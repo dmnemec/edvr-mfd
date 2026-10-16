@@ -2,11 +2,13 @@
 
 ## Status
 - **Active Open Issues**: 0
-- **Resolved Issues**: 10
+- **Resolved Issues**: 12
 - **Last Updated**: 2026-10-15
 - **Jump to Section**:
   - [Open Issues](#open-issues)
   - [Resolved Issues](#resolved)
+    - [MFD-009: Color preset name 1-off when scrolling in Settings tab](#mfd-009--color-preset-name-1-off-when-scrolling-in-settings-tab)
+    - [MFD-010: List row subtext overlaps main text due to insufficient row height and font collision](#mfd-010--list-row-subtext-overlaps-main-text-due-to-insufficient-row-height-and-font-collision)
     - [MFD-008: Multi-screen packages render as separate 3D quads instead of consolidated multi-tab displays](#mfd-008--multi-screen-packages-render-as-separate-3d-quads-instead-of-consolidated-multi-tab-displays)
     - [MFD-001: Directional HAT switch repeat press input suppression bleeding through to ship power pips](#mfd-001--directional-hat-switch-repeat-press-input-suppression-bleeding-through-to-ship-power-pips)
     - [MFD-002: Joystick/vJoy input not suppressed while MFD has focus](#mfd-002--joystickvjoy-input-not-suppressed-while-mfd-has-focus)
@@ -27,6 +29,30 @@
 ---
 
 ## Resolved
+
+### MFD-009 | Color preset name 1-off when scrolling in Settings tab
+
+- **ID**: MFD-009
+- **Discovered Date**: 2026-10-15
+- **Fixed Date**: 2026-10-15
+- **Root Cause**:
+  In `src/mfd_manager.cpp`, `handleSettingsAdjustment()` updated `screen.theme` (cycling through theme presets) when the user adjusted "Preset Theme", but did not call `ensureSettingsTab(screen)`. Because `ensureSettingsTab()` only executed during `MfdManager::update()` (which precedes input polling), the view model's settings key-value pair retained the previous theme name during the render pass of that frame. Furthermore, subsequent frames without input skipped rendering because `dirty` remained false, causing the displayed theme name to lag exactly one step behind the active rendered colors.
+- **Fix**:
+  Added synchronous call to `ensureSettingsTab(screen)` immediately at the conclusion of `handleSettingsAdjustment()` so all updated labels and values are reflected synchronously in the view model before rasterization.
+
+---
+
+### MFD-010 | List row subtext overlaps main text due to insufficient row height and font collision
+
+- **ID**: MFD-010
+- **Discovered Date**: 2026-10-15
+- **Fixed Date**: 2026-10-15
+- **Root Cause**:
+  In `src/mfd_renderer.cpp` `renderListTab()`, list items were drawn with fixed row height `rowH = 26` px. The main label was drawn at `y + 1` and the sublabel was drawn at `y + 12`. Because `MfdFont::kCharHeight` is 16 pixels, the label spanned `y + 1` to `y + 16` and the sublabel spanned `y + 12` to `y + 27`. This caused an unavoidable 5-pixel vertical collision where sublabel glyphs overwrote the bottom pixels of the main label text.
+- **Fix**:
+  In `renderListTab()`, dynamically expand row height to 36 px whenever a tab contains sublabels (`hasAnySublabel`). Draw the main label on Line 1 (`y + 2`) and the sublabel on Line 2 (`y + 19`), completely eliminating vertical overlap and providing crisp 8x16 font rendering for both lines with a 1px separation gap. Right-hand values and badges are aligned on Line 1. Single-line tabs retain compact 24-pixel rows.
+
+---
 
 ### MFD-008 | Multi-screen packages render as separate 3D quads instead of consolidated multi-tab displays
 

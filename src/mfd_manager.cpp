@@ -590,6 +590,7 @@ void MfdManager::handleSettingsAdjustment(MfdScreen& screen, const std::string& 
         screen.gazeTracker.setAnchorOffset(0.0f, (std::clamp)(offY, -0.5f, 0.5f));
     }
 
+    ensureSettingsTab(screen);
     screen.isDirty = true;
     saveSettings();
 }
