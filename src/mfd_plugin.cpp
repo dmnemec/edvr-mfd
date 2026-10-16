@@ -148,6 +148,13 @@ static void EDVR_API setPackageCompanions(const char*, int64_t val, void* userDa
     CompanionSupervisor::instance().setPackageCompanionsEnabled(holder->packageId, b);
 }
 
+// The host returns -1 from registerSetting when it rejects a row; log the key so the rejection is visible.
+static void logRejectedSetting(const EdvrHostServices* host, const char* key) {
+    if (!host->logNote) return;
+    std::string msg = std::string("mfd_plugin: registerSetting rejected key '") + key + "'\n";
+    host->logNote(msg.c_str());
+}
+
 static void registerMfdSettings(const EdvrHostServices* host,
                                 const std::vector<MfdPackageManifest>& packages,
                                 const std::wstring& iniPath) {
@@ -164,7 +171,7 @@ static void registerMfdSettings(const EdvrHostServices* host,
     defEnabled.defaultValue = 1;
     defEnabled.getter = getMfdEnabled;
     defEnabled.setter = setMfdEnabled;
-    host->registerSetting(&defEnabled);
+    if (host->registerSetting(&defEnabled) < 0) logRejectedSetting(host, defEnabled.key);
 
     EdvrPluginSettingDef defShowAll{};
     defShowAll.structSize = sizeof(EdvrPluginSettingDef);
@@ -176,7 +183,7 @@ static void registerMfdSettings(const EdvrHostServices* host,
     defShowAll.defaultValue = 1;
     defShowAll.getter = getShowAll;
     defShowAll.setter = setShowAll;
-    host->registerSetting(&defShowAll);
+    if (host->registerSetting(&defShowAll) < 0) logRejectedSetting(host, defShowAll.key);
 
     EdvrPluginSettingDef defLocked{};
     defLocked.structSize = sizeof(EdvrPluginSettingDef);
@@ -188,7 +195,7 @@ static void registerMfdSettings(const EdvrHostServices* host,
     defLocked.defaultValue = 0;
     defLocked.getter = getHeadLocked;
     defLocked.setter = setHeadLocked;
-    host->registerSetting(&defLocked);
+    if (host->registerSetting(&defLocked) < 0) logRejectedSetting(host, defLocked.key);
 
     EdvrPluginSettingDef defHideAll{};
     defHideAll.structSize = sizeof(EdvrPluginSettingDef);
@@ -200,7 +207,7 @@ static void registerMfdSettings(const EdvrHostServices* host,
     defHideAll.defaultValue = 0;
     defHideAll.getter = getHideAllToggle;
     defHideAll.setter = setHideAllToggle;
-    host->registerSetting(&defHideAll);
+    if (host->registerSetting(&defHideAll) < 0) logRejectedSetting(host, defHideAll.key);
 
     // 2. Dynamic Per-Package Settings (§9.2)
     std::lock_guard<std::mutex> lock(s_packageSettingsMutex);
@@ -233,7 +240,7 @@ static void registerMfdSettings(const EdvrHostServices* host,
         holder->defShow.getter = getPackageShow;
         holder->defShow.setter = setPackageShow;
         holder->defShow.userData = holder.get();
-        host->registerSetting(&holder->defShow);
+        if (host->registerSetting(&holder->defShow) < 0) logRejectedSetting(host, holder->defShow.key);
 
         // Register pkg.<id>.companions
         holder->defCompanions.structSize = sizeof(EdvrPluginSettingDef);
@@ -246,7 +253,7 @@ static void registerMfdSettings(const EdvrHostServices* host,
         holder->defCompanions.getter = getPackageCompanions;
         holder->defCompanions.setter = setPackageCompanions;
         holder->defCompanions.userData = holder.get();
-        host->registerSetting(&holder->defCompanions);
+        if (host->registerSetting(&holder->defCompanions) < 0) logRejectedSetting(host, holder->defCompanions.key);
 
         s_packageSettings.push_back(std::move(holder));
     }
