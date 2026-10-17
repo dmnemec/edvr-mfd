@@ -5,6 +5,7 @@
 - **Deciders**: dmnemec (owner), design interview (grill-me session)
 - **Supersedes**: hardcoded `ensureDefaultSlots()` content model; "Active displays 1/2/3" setting
 - **Companion doc**: [`docs/design/mfd-v1-release-design.md`](../design/mfd-v1-release-design.md)
+- **Scope note (2026-10-17)**: Constraints that exist only to ship the v1.0 MVP no longer apply now that the MVP is complete. In particular, the "no runtime network calls" limit (decision 12, and the rejected Inara/Spansh/EDSM lookups alternative) is lifted: **companions** may call external services. The architectural rules still hold, including decision 1: the **plugin** itself never talks to the network.
 
 ## Context
 
@@ -50,7 +51,7 @@ The release needs: unlimited user-imported MFDs, real-time updates from external
 | Large F8 menu (dwell, opacity, reload, reset, open folder) | Owner chose minimal; reload/restart is handled automatically by supervision. |
 | Complex reverse-engineering spike for pause menu (MFD-006) | Rejected: don't waste time investigating; ship a "Hide All" toggle button in settings. |
 | Plugin self-extracts examples from DLL resources | Bloats DLL; zip + installer already covers this. |
-| Runtime price/system lookups (Inara/Spansh/EDSM) | Owner requires no external calls; game-provided `MeanPrice` and local Journal are sufficient. |
+| Runtime price/system lookups (Inara/Spansh/EDSM) | Owner requires no external calls; game-provided `MeanPrice` and local Journal are sufficient. _(v1.0 MVP only; lifted for companions after MVP. See scope note.)_ |
 
 ## Consequences
 
