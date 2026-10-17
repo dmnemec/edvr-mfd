@@ -1,7 +1,9 @@
 # EDVR MFD — Issue & Bug Tracker
 
+> **Frozen archive.** New issues live in GitHub Issues (https://github.com/dmnemec/edvr-mfd/issues); see `AGENTS.md` → Issue tracking. This file holds MFD-001…MFD-018 for historical RCAs only; do not add entries.
+
 ## Status
-- **Active Open Issues**: 3
+- **Active Open Issues**: 0 (MFD-015, MFD-016, MFD-017 migrated to GitHub #2, #3, #4)
 - **Resolved Issues**: 17
 - **Last Updated**: 2026-10-16
 - **Jump to Section**:
@@ -34,74 +36,19 @@
 
 ### MFD-015 | Media Player MFD with system media control (GSMTC) & HOTAS navigation
 
-- **ID**: MFD-015
-- **Type**: Feature Request
-- **Created Date**: 2026-10-16
-- **Status**: Open
-- **Description**:
-  Provide an in-cockpit MFD for playback and control of external media players (Spotify, YouTube, browser playback, etc.) using Windows Global System Media Transport Controls (GSMTC) and synthetic key fallback (`VK_MEDIA_*`).
-- **Architecture & Technical Requirements**:
-  1. **Companion Process**: Implemented as a standalone Go companion executable (`companion/cmd/mediaplayer`).
-  2. **Metadata & Status Display**: Uses Windows WinRT GSMTC session APIs to capture current media track name, artist/channel, playback status (playing/paused), timeline/scrub position, and volume level into the `MfdViewModel` schema.
-  3. **VR-Accessible Controls**: Interactive action controls for Play/Pause, Next Track, Previous Track, Volume Up/Down, and Mute navigable entirely via cockpit HOTAS/joystick hat switches and keyboard navigation without breaking immersion or taking off the VR headset.
-  4. **Input Gating**: Router swallows all mapped navigation and action execution events while the media player MFD is focused to avoid leaking inputs to flight controls.
-- **Acceptance Criteria**:
-  - Live media sessions on Windows (Spotify, YouTube in Chrome/Edge, etc.) populate track title and artist in the MFD.
-  - Triggering Next/Prev/Play-Pause via MFD UI updates the external media session.
-  - No inputs leak to ship controls while interacting with media player buttons in VR.
+- **Status**: Migrated to GitHub [#2](https://github.com/dmnemec/edvr-mfd/issues/2) — track it there.
 
 ---
 
 ### MFD-016 | Dynamic companion-driven color overrides & state-reactive theming
 
-- **ID**: MFD-016
-- **Type**: Feature Request
-- **Created Date**: 2026-10-16
-- **Status**: Open
-- **Description**:
-  Enable companion packages to dynamically control MFD rendering colors based on real-time game telemetry (e.g. ship module integrity, combat state, hardpoints deployed, shield status) or scripted animations (e.g. cycling disco mode).
-- **Architecture & Technical Requirements**:
-  1. **View Model Schema Extension**: Extend the MFD schema and view model (`mfd_view_model.h` / companion JSON) to support dynamic color override fields (`dynamic_color`, `alert_mode`, `alert_color`).
-  2. **State Reactive Interpolation**:
-     - Implement smooth gradient transitions (e.g. lerping from default cockpit amber `(255, 110, 0)` down to warning red `(255, 30, 20)` in proportion to module health/integrity).
-     - Color returns cleanly to default theme upon module repair/restoration.
-  3. **Render Throttling & Animation Performance**:
-     - MFD dirty flagging and GPU upload frequency must be throttled to prevent VR frame pacing drops during rapid color transitions or disco animations.
-     - Build a prototype testing MFD specifically to evaluate upload tick rates (e.g., 10 Hz vs 30 Hz vs 60 Hz) to establish performance thresholds.
-  4. **Priority Hierarchy**: Dynamic game-state alerts can be configured to take priority over standard user color presets, while preserving user customization override when explicitly chosen.
-- **Acceptance Criteria**:
-  - Companion emitting a degraded integrity or alert status smoothly fades MFD accent and background colors toward alarm palettes.
-  - Rapid color transitions maintain 90+ FPS in VR without causing D3D11 device contention or micro-stutter.
-  - Restoring normal ship state seamlessly reverts the MFD back to the configured default theme.
+- **Status**: Migrated to GitHub [#3](https://github.com/dmnemec/edvr-mfd/issues/3) — track it there.
 
 ---
 
 ### MFD-017 | Configurable MFD viewable size, aspect ratios, and compact layout templates
 
-- **ID**: MFD-017
-- **Type**: Feature Request
-- **Created Date**: 2026-10-16
-- **Status**: Open
-- **Description**:
-  Support custom physical dimensions (width and height in meters), customizable render aspect ratios, and compact layout templates for MFDs so displays can be thin horizontal bars (such as a compact media player banner) rather than fixed 4:3 rectangles.
-- **Architecture & Technical Requirements**:
-  1. **Manifest Sizing Declarations**:
-     - Extend `manifest.json` schema to allow packages to declare default physical dimensions (`width_m`, `height_m`) and render texture resolution (`render_width`, `render_height`).
-     - Example: Media player banner with `0.24m x 0.06m` physical quad and `512x128` pixel buffer.
-  2. **In-Cockpit Settings Customization**:
-     - Add Width and Height adjustment rows to the MFD Settings tab with "Default" and "Custom" modes.
-     - Custom mode exposes numeric/stepped adjustment sliders for physical quad dimensions (and corresponding render buffer dimensions).
-     - Includes a "Reset to Default" action matching the color settings pattern.
-  3. **Compact / Banner Layout Templates**:
-     - Provide layout templates (`"standard"`, `"compact_banner"`, `"minimal"`) in the rendering pipeline (`MfdRenderer`) so UI components (headers, tab bars, content items) reflow cleanly into horizontal banners without overlapping or clipping text.
-  4. **Compositor & D3D11 Pipeline Support**:
-     - Dynamically recreate or resize the D3D11 render target texture and OpenXR quad layer dimensions per screen instead of hardcoding uniform quad proportions.
-- **Acceptance Criteria**:
-  - A package can define a banner aspect ratio in its manifest and render with crisp non-distorted texels.
-  - Settings tab allows the user to adjust and reset MFD width and height live in the headset.
-  - Banner template displays media controls and status legibly within a condensed vertical space.
-
-## Resolved
+- **Status**: Migrated to GitHub [#4](https://github.com/dmnemec/edvr-mfd/issues/4) — track it there.
 
 ### MFD-018 | Power readout shows Max potential draw instead of Current active draw after priority shedding
 

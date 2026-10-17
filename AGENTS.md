@@ -44,7 +44,8 @@ When a fix requires changes in both repos (new ABI field, host-side gate fix, et
 
 Source is in `src\`, the plugin ABI in `include\`, tooling in `tools\`, and design docs in `docs\`. Non-obvious entries:
 
-- `docs\ISSUES.md` — bug and issue tracker. **Read this first when picking up work.**
+- GitHub Issues (`gh issue list`) — the bug and issue tracker. **Check it first when picking up work.** See Issue tracking below.
+- `docs\ISSUES.md` — frozen archive of MFD-001…MFD-018 and their root-cause analyses. Read-only.
 - `include\log.h` — Win32 HANDLE logger, NOT CRT stdio (see MFD-R001 in `docs/ISSUES.md`).
 - `include\edvr_plugin_api.h` — shared with the host; see constraints below.
 - `src\mfd_compositor.h` — `OpenXrQuadCompositor` is a stub that only holds pose/pixel data; the host does the compositing.
@@ -59,14 +60,16 @@ Source is in `src\`, the plugin ABI in `include\`, tooling in `tools\`, and desi
 
 ## Issue tracking
 
-All known bugs and open work items live in `docs/ISSUES.md`. **Before starting any bug fix:**
-1. Read `docs/ISSUES.md` `## Status` block.
-2. Find the issue ID (`MFD-NNN`).
-3. State the hypothesis and the specific log line or telemetry field that would confirm it before editing code.
-4. Mark the issue `In Progress` in the doc while working.
-5. Move it to `## Resolved` with the commit hash when done.
+All bugs and open work items live in **GitHub Issues** (`dmnemec/edvr-mfd`), managed with `gh`. `docs/ISSUES.md` is a frozen archive (MFD-001…MFD-018): read it for past RCAs, never add to it.
 
-Do not start work on a bug that is not tracked in `docs/ISSUES.md`. If you find a new bug, add it first.
+Several developers and agents may work at once; an issue's **assignee** owns it. **Before starting any work:**
+1. `gh issue list --state open` — pick an issue labelled `ready-for-agent` (or `ready-for-human` if you are one) **with no assignee**.
+2. Claim it as your first write: `gh issue edit <n> --add-assignee @me --add-label in-progress --remove-label ready-for-agent`. If someone else is assigned, pick another issue.
+3. For bugs, comment the hypothesis and the specific log line or telemetry field that would confirm it, before editing code.
+4. Code pushed but not yet flown: swap `in-progress` for `needs-test-flight`.
+5. Verified: commit with `Fixes #<n>` in the message, push, and confirm the issue closed (or `gh issue close <n> --comment "<hash>"`).
+
+Do not start work that has no issue. If you find a new bug, `gh issue create --label needs-triage --label bug` first. Labels and claim rules: `docs/agents/triage-labels.md`, `docs/agents/issue-tracker.md`.
 
 ## Diagnosis discipline
 
@@ -81,3 +84,17 @@ Do not start work on a bug that is not tracked in `docs/ISSUES.md`. If you find 
 - Write commit messages to a temp file and use `git commit -F` (avoids PowerShell quote escaping).
 - The task is not done until `git push` has been confirmed (run `git log origin/main -1`).
 - Always verify the installed DLL's PE timestamp matches the build after install.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `dmnemec/edvr-mfd` via `gh`, with assignee-based claiming for concurrent work. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five triage roles plus `in-progress` and `needs-test-flight` work-state labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` (created lazily) and `docs/adr/`. See `docs/agents/domain.md`.
