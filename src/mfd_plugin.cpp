@@ -241,6 +241,9 @@ static void registerMfdSettings(const EdvrHostServices* host,
         holder->packageId = pkg.id;
         holder->packageName = pkg.name.empty() ? pkg.id : pkg.name;
         holder->header = "MFD: " + holder->packageName;
+        // The host lowercases saved setting keys, so these keys rely on package ids
+        // being lowercase-only (isValidPackageId). Relaxing that regex makes
+        // case-variant ids share settings (#1).
         holder->showKey = "pkg." + pkg.id + ".show";
         holder->companionsKey = "pkg." + pkg.id + ".companions";
         holder->showLabel = "Show displays";
