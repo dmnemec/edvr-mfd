@@ -17,6 +17,8 @@ struct MfdManifestPose {
     float rollDeg = 0.0f;
     float widthM = 0.24f;
     float heightM = 0.16f;
+    int renderWidth = 0;                     // Optional texture size override (0 = derive from widthM/heightM)
+    int renderHeight = 0;
 
     MfdPose toMfdPose() const {
         MfdPose p;

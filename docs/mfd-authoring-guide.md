@@ -162,6 +162,9 @@ All packages are placed under `<game_dir>\plugins\edvr_mfd\mfds\<package_id>\`:
 ```
 
 - `pose`: Optional 3D cockpit transform (`position` in meters $[x, y, z]$, `pitchDeg`, `yawDeg`, `widthM`, `heightM`). If omitted, auto-layout places the screen in the next available console slot.
+  - **Render resolution** follows the physical size at a fixed density of 512 px per 0.24 m (≈ 2133 px/m), so text is never stretched: `0.24 × 0.16 m` renders at `512 × 341`, a `0.24 × 0.06 m` banner at `512 × 128`. Each axis is clamped to 64–2048 px.
+  - `renderWidth` / `renderHeight` (optional integers, both or neither) override the derived resolution. If their aspect ratio differs from `widthM:heightM`, the plugin logs a warning because the screen will look stretched.
+  - In the headset, the SETTINGS tab's **Display Width** and **Display Height** (0.50–2.00×) widen or heighten both the quad and its resolution, so the layout gains columns or rows. **Display Scale** only magnifies. A standard screen can't be made shorter than one content row. **Reset Pose** restores all three to 1.00×.
 - `contexts`: List of context strings when screen is rendered.
 - `excludeContexts`: List of context strings when screen is hidden.
 - `autoHideUntilGaze`: If `true`, panel remains invisible until focused by gaze.

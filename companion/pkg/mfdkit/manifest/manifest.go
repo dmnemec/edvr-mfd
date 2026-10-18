@@ -101,6 +101,9 @@ type Pose struct {
 	RollDeg  float64   `json:"rollDeg"`
 	WidthM   float64   `json:"widthM"`
 	HeightM  float64   `json:"heightM"`
+	// Optional texture size override; both or neither. Zero means derive from WidthM/HeightM.
+	RenderWidth  int `json:"renderWidth,omitempty"`
+	RenderHeight int `json:"renderHeight,omitempty"`
 }
 
 // Screen represents a screen declared in manifest.json (§4.2).
@@ -264,6 +267,12 @@ func ValidateScreens(packageDir string, m *Manifest) []string {
 			}
 			if s.Pose.HeightM <= 0 {
 				errs = append(errs, fmt.Sprintf("%s pose.heightM must be greater than 0", prefix))
+			}
+			if (s.Pose.RenderWidth != 0) != (s.Pose.RenderHeight != 0) {
+				errs = append(errs, fmt.Sprintf("%s pose must declare both renderWidth and renderHeight or neither", prefix))
+			}
+			if s.Pose.RenderWidth < 0 || s.Pose.RenderHeight < 0 {
+				errs = append(errs, fmt.Sprintf("%s pose.renderWidth/renderHeight must be positive", prefix))
 			}
 		}
 

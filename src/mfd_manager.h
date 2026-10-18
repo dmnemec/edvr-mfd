@@ -11,6 +11,7 @@
 #include "mfd_content_watcher.h"
 #include "mfd_context.h"
 #include "mfd_event_log.h"
+#include "mfd_screen_size.h"
 
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -45,6 +46,11 @@ struct MfdScreen {
     float scale = 1.0f;
     float baseWidthM = 0.24f;
     float baseHeightM = 0.16f;
+    float widthFactor = 1.0f;                // User Width setting: grows quad and texture width
+    float heightFactor = 1.0f;               // User Height setting: grows quad and texture height
+    int renderOverrideWidth = 0;             // Manifest renderWidth/renderHeight (0 = derive)
+    int renderOverrideHeight = 0;
+    MfdLayoutTemplate layout = MfdLayoutTemplate::kStandard;
 
     std::unique_ptr<IMfdProvider> provider;
     std::unique_ptr<MfdRenderer> renderer;
@@ -112,6 +118,11 @@ public:
     const std::wstring& mfdsDirectory() const { return m_mfdsDir; }
     void discoverAndLoadPackages();
     static void applyAutoLayout(std::vector<MfdScreen>& screens);
+
+    // Recompute a screen's quad size (base x scale x axis factor) and render size (base x axis
+    // factor), creating or resizing its renderer when the render size changes (#4).
+    static void applyScreenSize(MfdScreen& screen);
+    static MfdRenderSize screenBaseRenderSize(const MfdScreen& screen);
 
     // Screen accessors
     const std::vector<MfdScreen>& screens() const { return m_screens; }
@@ -203,8 +214,8 @@ private:
     int m_activeDisplayCount = 2;
     bool m_headLocked = false;
     bool m_packagesLoaded = false;
-    int m_renderWidth = 512;
-    int m_renderHeight = 384;
+    int m_renderWidth = 512;                 // Compositor stub texture size only; each screen sizes
+    int m_renderHeight = 384;                // its own renderer (applyScreenSize)
     DebugStats m_debugStats;
 
     Vec3 m_lastHeadPos{0.0f, 0.0f, 0.0f};

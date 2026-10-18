@@ -2997,6 +2997,173 @@ int test_show_settings_tab_toggle() {
     return 0;
 }
 
+// 23. Per-screen render resolution from physical aspect + Width/Height settings (#4)
+int test_screen_render_size_and_axis_factors() {
+    // Derivation, override and clamping
+    MfdRenderSize std3x2 = baseRenderSize(0.24f, 0.16f);
+    TEST_CHECK(std3x2.width == 512 && std3x2.height == 341, "0.24x0.16 m derives 512x341");
+    MfdRenderSize banner = baseRenderSize(0.24f, 0.06f);
+    TEST_CHECK(banner.width == 512 && banner.height == 128, "0.24x0.06 m derives 512x128");
+    MfdRenderSize ovr = baseRenderSize(0.24f, 0.16f, 640, 480);
+    TEST_CHECK(ovr.width == 640 && ovr.height == 480, "Manifest override replaces derived size");
+    MfdRenderSize halfOvr = baseRenderSize(0.24f, 0.16f, 640, 0);
+    TEST_CHECK(halfOvr == std3x2, "Override needs both dimensions");
+    MfdRenderSize tiny = baseRenderSize(0.005f, 0.005f);
+    TEST_CHECK(tiny.width == kMinRenderDim && tiny.height == kMinRenderDim, "Tiny screens clamp to minimum");
+    MfdRenderSize huge = baseRenderSize(3.0f, 3.0f);
+    TEST_CHECK(huge.width == kMaxRenderDim && huge.height == kMaxRenderDim, "Huge screens clamp to maximum");
+
+    // Factor math
+    MfdRenderSize wide = effectiveRenderSize(std3x2, 1.5f, 1.0f);
+    TEST_CHECK(wide.width == 768 && wide.height == 341, "Width 1.5x widens texture to 768");
+    MfdRenderSize shortH = effectiveRenderSize(std3x2, 1.0f, 0.5f);
+    TEST_CHECK(shortH.width == 512 && shortH.height == 171, "Height 0.5x shortens texture to 171");
+
+    // Aspect mismatch warning predicate
+    TEST_CHECK(!renderAspectMismatch(512, 341, 0.24f, 0.16f), "Matching aspect is not flagged");
+    TEST_CHECK(renderAspectMismatch(640, 480, 0.24f, 0.16f), "4:3 override on 3:2 quad is flagged");
+
+    // Per-template Height minimum: standard keeps one content row, never forces above 1.0
+    TEST_CHECK(std::abs(minHeightFactor(MfdLayoutTemplate::kStandard, 341) - kMinAxisFactor) < 1e-4f, "341 px standard can shrink to 0.50x");
+    TEST_CHECK(std::abs(minHeightFactor(MfdLayoutTemplate::kStandard, 200) - 0.71f) < 1e-4f, "200 px standard can shrink to 0.71x");
+    TEST_CHECK(std::abs(minHeightFactor(MfdLayoutTemplate::kStandard, 128) - 1.0f) < 1e-4f, "Already-short standard can't shrink");
+
+    // Manifest validation
+    std::string err;
+    MfdPackageManifest m;
+    TEST_CHECK(parseManifestJson(R"({"manifestVersion":1,"id":"size_pkg","name":"S","screens":[{"id":"a","file":"a.json",
+        "pose":{"position":[0,0,-0.5],"pitchDeg":0,"yawDeg":0,"widthM":0.24,"heightM":0.16,"renderWidth":640,"renderHeight":480}}]})",
+        m, "", &err), "Manifest with render override parses");
+    TEST_CHECK(m.screens[0].pose.renderWidth == 640 && m.screens[0].pose.renderHeight == 480, "Override values parsed");
+    MfdPackageManifest bad;
+    TEST_CHECK(!parseManifestJson(R"({"manifestVersion":1,"id":"size_pkg","name":"S","screens":[{"id":"a","file":"a.json",
+        "pose":{"position":[0,0,-0.5],"pitchDeg":0,"yawDeg":0,"widthM":0.24,"heightM":0.16,"renderWidth":640}}]})",
+        bad, "", &err), "renderWidth without renderHeight is rejected");
+    TEST_CHECK(!parseManifestJson(R"({"manifestVersion":1,"id":"size_pkg","name":"S","screens":[{"id":"a","file":"a.json",
+        "pose":{"position":[0,0,-0.5],"pitchDeg":0,"yawDeg":0,"widthM":0.24,"heightM":0.16,"renderWidth":640.5,"renderHeight":0}}]})",
+        bad, "", &err), "Non-integer / non-positive override is rejected");
+
+    // Manager integration: derived sizes, live Width/Height/Scale changes, persistence
+    auto writeFile = [](const std::wstring& path, const std::string& content) {
+        HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) {
+            DWORD written = 0;
+            WriteFile(h, content.data(), static_cast<DWORD>(content.size()), &written, nullptr);
+            CloseHandle(h);
+        }
+    };
+    wchar_t tempBase[MAX_PATH];
+    GetTempPathW(MAX_PATH, tempBase);
+    std::wstring testRoot = std::wstring(tempBase) + L"edvr_mfd_size_test_" + std::to_wstring(GetTickCount64());
+    std::wstring mfdsDir = testRoot + L"\\mfds";
+    std::wstring pkgDir = mfdsDir + L"\\size_pkg";
+    std::wstring testIni = testRoot + L"\\edvr_mfd_size_test.ini";
+    CreateDirectoryW(testRoot.c_str(), nullptr);
+    CreateDirectoryW(mfdsDir.c_str(), nullptr);
+    CreateDirectoryW(pkgDir.c_str(), nullptr);
+    writeFile(pkgDir + L"\\manifest.json", R"({
+        "manifestVersion": 1, "id": "size_pkg", "name": "Size Package",
+        "screens": [
+            { "id": "std", "file": "std.json",
+              "pose": { "position": [0, -0.2, -0.5], "pitchDeg": -10, "yawDeg": 0, "widthM": 0.24, "heightM": 0.16 } },
+            { "id": "banner", "file": "banner.json",
+              "pose": { "position": [0.3, -0.2, -0.5], "pitchDeg": -10, "yawDeg": 30, "widthM": 0.24, "heightM": 0.06 } },
+            { "id": "ovr", "file": "ovr.json",
+              "pose": { "position": [-0.3, -0.2, -0.5], "pitchDeg": -10, "yawDeg": -30, "widthM": 0.24, "heightM": 0.16,
+                        "renderWidth": 640, "renderHeight": 480 } }
+        ]
+    })");
+    // Old INI without the new keys: factors must load as 1.00x
+    WritePrivateProfileStringW(L"size_pkg/std", L"scale", L"1.00", testIni.c_str());
+
+    auto adjust = [](MfdScreen& s, const std::string& key, MfdInputAction dir, int times) -> bool {
+        auto& vm = s.provider->viewModel();
+        int idx = -1;
+        for (size_t t = 0; t < vm.tabs.size(); ++t) {
+            if (vm.tabs[t].id == "__settings") { idx = static_cast<int>(t); break; }
+        }
+        if (idx < 0) return false;
+        vm.activeTabIndex = idx;
+        s.provider->onFocusChanged(true);
+        for (int i = 0; i < times; ++i) {
+            auto& tab = vm.tabs[idx];
+            int k = -1;
+            for (size_t j = 0; j < tab.keyValues.size(); ++j) {
+                if (tab.keyValues[j].key == key) { k = static_cast<int>(j); break; }
+            }
+            if (k < 0) return false;
+            tab.selectedIndex = k;
+            s.provider->onInput(dir);
+        }
+        return true;
+    };
+
+    {
+        MfdManager mgr;
+        mgr.setIniPathOverride(testIni);
+        TEST_CHECK(mgr.initialize(512, 384, mfdsDir), "Manager initialized for size test");
+        MfdScreen* sStd = mgr.findScreen("size_pkg/std");
+        MfdScreen* sBan = mgr.findScreen("size_pkg/banner");
+        MfdScreen* sOvr = mgr.findScreen("size_pkg/ovr");
+        TEST_CHECK(sStd && sBan && sOvr, "All three size screens loaded");
+
+        TEST_CHECK(sStd->renderer->width() == 512 && sStd->renderer->height() == 341, "Standard 3:2 screen renders 512x341");
+        TEST_CHECK(sBan->renderer->width() == 512 && sBan->renderer->height() == 128, "Banner-sized screen renders 512x128");
+        TEST_CHECK(sOvr->renderer->width() == 640 && sOvr->renderer->height() == 480, "Override screen renders 640x480");
+        TEST_CHECK(sStd->widthFactor == 1.0f && sStd->heightFactor == 1.0f, "Missing INI keys load as 1.00x");
+
+        // Scale magnifies the quad only
+        TEST_CHECK(adjust(*sStd, "Display Scale", MfdInputAction::kRight, 2), "Adjusted Display Scale");
+        TEST_CHECK(std::abs(sStd->pose.widthM - 0.24f * 1.10f) < 1e-4f, "Scale grows quad width");
+        TEST_CHECK(sStd->renderer->width() == 512 && sStd->renderer->height() == 341, "Scale leaves render size unchanged");
+        TEST_CHECK(adjust(*sStd, "Display Scale", MfdInputAction::kLeft, 2), "Restored Display Scale");
+
+        // Width 1.5x grows quad and texture together
+        TEST_CHECK(adjust(*sStd, "Display Width", MfdInputAction::kRight, 10), "Adjusted Display Width");
+        TEST_CHECK(std::abs(sStd->widthFactor - 1.5f) < 1e-4f, "Width factor 1.50x");
+        TEST_CHECK(std::abs(sStd->pose.widthM - 0.36f) < 1e-4f, "Quad width 0.36 m");
+        TEST_CHECK(sStd->renderer->width() == 768 && sStd->renderer->height() == 341, "Render width 768");
+        TEST_CHECK(sStd->needsGpuUpload, "Resize schedules GPU re-upload");
+
+        // Height clamps at the standard template minimum
+        TEST_CHECK(adjust(*sStd, "Display Height", MfdInputAction::kLeft, 20), "Adjusted Display Height");
+        TEST_CHECK(std::abs(sStd->heightFactor - 0.5f) < 1e-4f, "Height stops at 0.50x");
+        TEST_CHECK(sStd->renderer->height() == 171, "Render height 171");
+        TEST_CHECK(sStd->renderer->height() >= minContentHeightPx(MfdLayoutTemplate::kStandard), "Still fits one content row");
+
+        TEST_CHECK(adjust(*sBan, "Display Height", MfdInputAction::kLeft, 3), "Adjusted banner Display Height");
+        TEST_CHECK(std::abs(sBan->heightFactor - 1.0f) < 1e-4f, "Already-short standard screen can't shrink");
+
+        mgr.render();
+        TEST_CHECK(sStd->renderer->width() == 768, "Render after resize keeps new size");
+        mgr.shutdown();
+    }
+
+    {
+        MfdManager mgr;
+        mgr.setIniPathOverride(testIni);
+        TEST_CHECK(mgr.initialize(512, 384, mfdsDir), "Manager re-initialized for persistence check");
+        MfdScreen* sStd = mgr.findScreen("size_pkg/std");
+        TEST_CHECK(sStd, "Standard screen reloaded");
+        TEST_CHECK(std::abs(sStd->widthFactor - 1.5f) < 1e-4f && std::abs(sStd->heightFactor - 0.5f) < 1e-4f, "Factors persist across restart");
+        TEST_CHECK(sStd->renderer->width() == 768 && sStd->renderer->height() == 171, "Restored render size");
+
+        // Reset Pose restores factors to 1.00x
+        TEST_CHECK(adjust(*sStd, "Reset Pose", MfdInputAction::kRight, 1), "Pressed Reset Pose");
+        TEST_CHECK(sStd->widthFactor == 1.0f && sStd->heightFactor == 1.0f && sStd->scale == 1.0f, "Reset Pose restores 1.00x");
+        TEST_CHECK(sStd->renderer->width() == 512 && sStd->renderer->height() == 341, "Reset restores derived render size");
+        mgr.shutdown();
+    }
+
+    DeleteFileW((pkgDir + L"\\manifest.json").c_str());
+    DeleteFileW((pkgDir + L"\\events.jsonl").c_str());
+    RemoveDirectoryW(pkgDir.c_str());
+    RemoveDirectoryW(mfdsDir.c_str());
+    DeleteFileW(testIni.c_str());
+    RemoveDirectoryW(testRoot.c_str());
+    return 0;
+}
+
 int main() {
     std::cout << "[mfd_test] Running Cockpit MFD framework test suite..." << std::endl;
 
@@ -3068,6 +3235,9 @@ int main() {
 
     if (test_show_settings_tab_toggle() != 0) return 1;
     std::cout << "  ok  Show Settings Tab Global Toggle & Tab Lifecycle" << std::endl;
+
+    if (test_screen_render_size_and_axis_factors() != 0) return 1;
+    std::cout << "  ok  Per-Screen Render Size, Manifest Override & Width/Height Settings (#4)" << std::endl;
 
     std::cout << "[mfd_test] ALL TESTS PASSED." << std::endl;
     ExitProcess(0);

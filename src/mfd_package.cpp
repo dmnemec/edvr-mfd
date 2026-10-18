@@ -321,6 +321,22 @@ bool parseManifestJson(const std::string& jsonText,
             }
             screen.pose.heightM = pElem["heightM"].get<float>();
 
+            // renderWidth/renderHeight: optional, both or neither (#4)
+            bool hasRenderW = pElem.contains("renderWidth");
+            bool hasRenderH = pElem.contains("renderHeight");
+            if (hasRenderW != hasRenderH) {
+                return fail("Screen '" + screen.id + "' pose must declare both 'renderWidth' and 'renderHeight' or neither");
+            }
+            if (hasRenderW) {
+                const auto& rw = pElem["renderWidth"];
+                const auto& rh = pElem["renderHeight"];
+                if (!rw.is_number_integer() || rw.get<int>() <= 0 || !rh.is_number_integer() || rh.get<int>() <= 0) {
+                    return fail("Screen '" + screen.id + "' pose 'renderWidth'/'renderHeight' must be positive integers");
+                }
+                screen.pose.renderWidth = rw.get<int>();
+                screen.pose.renderHeight = rh.get<int>();
+            }
+
             screen.pose.hasPose = true;
         }
 

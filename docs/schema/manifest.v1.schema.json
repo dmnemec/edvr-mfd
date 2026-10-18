@@ -74,7 +74,21 @@
               "yawDeg": { "type": "number" },
               "rollDeg": { "type": "number" },
               "widthM": { "type": "number", "exclusiveMinimum": 0 },
-              "heightM": { "type": "number", "exclusiveMinimum": 0 }
+              "heightM": { "type": "number", "exclusiveMinimum": 0 },
+              "renderWidth": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Optional texture width override in pixels. Default: derived from widthM at 512 px per 0.24 m. Clamped to 64-2048."
+              },
+              "renderHeight": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Optional texture height override in pixels. Default: derived from heightM at 512 px per 0.24 m. Clamped to 64-2048."
+              }
+            },
+            "dependentRequired": {
+              "renderWidth": ["renderHeight"],
+              "renderHeight": ["renderWidth"]
             }
           },
           "contexts": {

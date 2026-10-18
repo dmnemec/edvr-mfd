@@ -300,14 +300,37 @@ void MfdManager::applyAutoLayout(std::vector<MfdScreen>& screens) {
 
                     scr.pose.position = Vec3(x, y, z);
                     scr.pose.orientation = Quat::fromEulerDegrees(scr.pitchDeg, scr.yawDeg, 0.0f);
-                    scr.pose.widthM = scr.baseWidthM * scr.scale;
-                    scr.pose.heightM = scr.baseHeightM * scr.scale;
                     scr.baselinePose = scr.pose;
+                    applyScreenSize(scr);
                     break;
                 }
             }
         }
     }
+}
+
+MfdRenderSize MfdManager::screenBaseRenderSize(const MfdScreen& screen) {
+    return baseRenderSize(screen.baseWidthM, screen.baseHeightM, screen.renderOverrideWidth, screen.renderOverrideHeight);
+}
+
+void MfdManager::applyScreenSize(MfdScreen& screen) {
+    screen.pose.widthM = screen.baseWidthM * screen.scale * screen.widthFactor;
+    screen.pose.heightM = screen.baseHeightM * screen.scale * screen.heightFactor;
+    screen.baselinePose.widthM = screen.pose.widthM;
+    screen.baselinePose.heightM = screen.pose.heightM;
+
+    MfdRenderSize size = effectiveRenderSize(screenBaseRenderSize(screen), screen.widthFactor, screen.heightFactor);
+    if (!screen.renderer) {
+        screen.renderer = std::make_unique<MfdRenderer>(size.width, size.height);
+    } else if (screen.renderer->width() != size.width || screen.renderer->height() != size.height) {
+        screen.renderer->resize(size.width, size.height);
+        Log::get().note("mfd: screen '%s' render size now %dx%d\n",
+                        screen.qualifiedId.c_str(), size.width, size.height);
+    } else {
+        return;
+    }
+    screen.isDirty = true;
+    screen.needsGpuUpload = true;
 }
 
 void MfdManager::setupScreenCallbacks(MfdScreen& screen) {
@@ -447,6 +470,12 @@ void MfdManager::ensureSettingsTab(MfdScreen& screen) {
     snprintf(buf, sizeof(buf), "%.2fx", screen.scale);
     settingsTab->keyValues.push_back({"Display Scale", buf, palette::kAmberNormal});
 
+    snprintf(buf, sizeof(buf), "%.2fx", screen.widthFactor);
+    settingsTab->keyValues.push_back({"Display Width", buf, palette::kAmberNormal});
+
+    snprintf(buf, sizeof(buf), "%.2fx", screen.heightFactor);
+    settingsTab->keyValues.push_back({"Display Height", buf, palette::kAmberNormal});
+
     snprintf(buf, sizeof(buf), "%.0f%%", screen.opacity * 100.0f);
     settingsTab->keyValues.push_back({"Glass Opacity", buf, palette::kCyanAccent});
 
@@ -537,16 +566,23 @@ void MfdManager::handleSettingsAdjustment(MfdScreen& screen, const std::string& 
         screen.opacity = (std::clamp)(screen.opacity + step * 0.05f, 0.0f, 1.0f);
     } else if (key == "Display Scale") {
         screen.scale = (std::clamp)(screen.scale + step * 0.05f, 0.50f, 2.0f);
-        screen.pose.widthM = screen.baseWidthM * screen.scale;
-        screen.pose.heightM = screen.baseHeightM * screen.scale;
-        screen.baselinePose.widthM = screen.pose.widthM;
-        screen.baselinePose.heightM = screen.pose.heightM;
+        applyScreenSize(screen);
+    } else if (key == "Display Width") {
+        screen.widthFactor = (std::clamp)(roundFactor(screen.widthFactor + step * kAxisFactorStep),
+                                          kMinAxisFactor, kMaxAxisFactor);
+        applyScreenSize(screen);
+    } else if (key == "Display Height") {
+        float minF = minHeightFactor(screen.layout, screenBaseRenderSize(screen).height);
+        screen.heightFactor = (std::clamp)(roundFactor(screen.heightFactor + step * kAxisFactorStep),
+                                           minF, kMaxAxisFactor);
+        applyScreenSize(screen);
     } else if (key == "Reset Pose") {
         screen.pose = screen.baselinePose;
         screen.scale = 1.0f;
-        screen.pose.widthM = screen.baseWidthM;
-        screen.pose.heightM = screen.baseHeightM;
+        screen.widthFactor = 1.0f;
+        screen.heightFactor = 1.0f;
         screen.baselinePose = screen.pose;
+        applyScreenSize(screen);
     } else if (key == "Color Mode") {
         int currentMode = screen.useCustomColor ? 2 : (screen.theme == MfdColorTheme::kDefaultAmber ? 0 : 1);
         int nextMode = (currentMode + (isLeft ? 2 : 1)) % 3;
@@ -655,12 +691,21 @@ void MfdManager::discoverAndLoadPackages() {
                 screen.yawDeg = scrManifest.pose.yawDeg;
                 screen.baseWidthM = scrManifest.pose.widthM;
                 screen.baseHeightM = scrManifest.pose.heightM;
+                screen.renderOverrideWidth = scrManifest.pose.renderWidth;
+                screen.renderOverrideHeight = scrManifest.pose.renderHeight;
+                if (renderAspectMismatch(screen.renderOverrideWidth, screen.renderOverrideHeight,
+                                         screen.baseWidthM, screen.baseHeightM)) {
+                    Log::get().note("mfd: WARNING screen '%s' renderWidth/renderHeight %dx%d does not match "
+                                    "widthM/heightM %.3fx%.3f aspect; it will look stretched\n",
+                                    screen.qualifiedId.c_str(), screen.renderOverrideWidth, screen.renderOverrideHeight,
+                                    screen.baseWidthM, screen.baseHeightM);
+                }
             } else {
                 screen.hasExplicitPose = false;
             }
 
             screen.provider = std::make_unique<DeclarativeMfdProvider>(screen.qualifiedId, screen.title);
-            screen.renderer = std::make_unique<MfdRenderer>(m_renderWidth, m_renderHeight);
+            applyScreenSize(screen);
             setupScreenCallbacks(screen);
 
             m_screens.push_back(std::move(screen));
@@ -669,6 +714,13 @@ void MfdManager::discoverAndLoadPackages() {
 
     loadSettings();
     applyAutoLayout(m_screens);
+
+    for (const auto& scr : m_screens) {
+        Log::get().note("mfd: screen '%s' quad %.3fx%.3f m, render %dx%d%s\n",
+                        scr.qualifiedId.c_str(), scr.pose.widthM, scr.pose.heightM,
+                        scr.renderer ? scr.renderer->width() : 0, scr.renderer ? scr.renderer->height() : 0,
+                        scr.renderOverrideWidth > 0 ? " (manifest override)" : "");
+    }
 
     m_contentWatcher = std::make_unique<MfdContentWatcher>(m_mfdsDir);
     m_contentWatcher->registerPackages(packages);
@@ -731,11 +783,15 @@ bool MfdManager::loadSettings() {
 
         if (GetPrivateProfileStringW(secW.c_str(), L"scale", L"", buf, 128, path.c_str()) > 0) {
             scr.scale = (std::clamp)(static_cast<float>(_wtof(buf)), 0.50f, 2.0f);
-            scr.pose.widthM = scr.baseWidthM * scr.scale;
-            scr.pose.heightM = scr.baseHeightM * scr.scale;
-            scr.baselinePose.widthM = scr.pose.widthM;
-            scr.baselinePose.heightM = scr.pose.heightM;
         }
+        if (GetPrivateProfileStringW(secW.c_str(), L"width_factor", L"", buf, 128, path.c_str()) > 0) {
+            scr.widthFactor = (std::clamp)(roundFactor(static_cast<float>(_wtof(buf))), kMinAxisFactor, kMaxAxisFactor);
+        }
+        if (GetPrivateProfileStringW(secW.c_str(), L"height_factor", L"", buf, 128, path.c_str()) > 0) {
+            float minF = minHeightFactor(scr.layout, screenBaseRenderSize(scr).height);
+            scr.heightFactor = (std::clamp)(roundFactor(static_cast<float>(_wtof(buf))), minF, kMaxAxisFactor);
+        }
+        applyScreenSize(scr);
         if (GetPrivateProfileStringW(secW.c_str(), L"opacity", L"", buf, 128, path.c_str()) > 0) {
             scr.opacity = (std::clamp)(static_cast<float>(_wtof(buf)), 0.0f, 1.0f);
         }
@@ -808,6 +864,12 @@ bool MfdManager::saveSettings() {
         swprintf_s(buf, L"%.2f", scr.scale);
         WritePrivateProfileStringW(secW.c_str(), L"scale", buf, path.c_str());
 
+        swprintf_s(buf, L"%.2f", scr.widthFactor);
+        WritePrivateProfileStringW(secW.c_str(), L"width_factor", buf, path.c_str());
+
+        swprintf_s(buf, L"%.2f", scr.heightFactor);
+        WritePrivateProfileStringW(secW.c_str(), L"height_factor", buf, path.c_str());
+
         swprintf_s(buf, L"%.2f", scr.opacity);
         WritePrivateProfileStringW(secW.c_str(), L"opacity", buf, path.c_str());
 
@@ -878,7 +940,7 @@ bool MfdManager::initialize(int renderWidth, int renderHeight, const std::wstrin
     discoverAndLoadPackages();
 
     m_enabled = true;
-    Log::get().note("mfd: initialized renderSize=(%dx%d), enabled=%d, screens=%zu, mfdsDir='%ls'\n",
+    Log::get().note("mfd: initialized compositorSize=(%dx%d), enabled=%d, screens=%zu, mfdsDir='%ls'\n",
                     m_renderWidth, m_renderHeight, isEnabled() ? 1 : 0, m_screens.size(), m_mfdsDir.c_str());
 
     if (m_compositor && m_compositor->backend() == MfdCompositorBackend::kOpenXrQuadLayer) {
@@ -1005,7 +1067,7 @@ bool MfdManager::addSlot(std::string name, std::unique_ptr<IMfdProvider> provide
     scr.baseWidthM = pose.widthM > 0.01f ? pose.widthM : 0.24f;
     scr.baseHeightM = pose.heightM > 0.01f ? pose.heightM : 0.16f;
     scr.provider = std::move(provider);
-    scr.renderer = std::make_unique<MfdRenderer>(m_renderWidth, m_renderHeight);
+    applyScreenSize(scr);
     scr.isVisible = true;
 
     setupScreenCallbacks(scr);

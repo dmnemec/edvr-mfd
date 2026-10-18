@@ -210,3 +210,52 @@ func TestManifestValidation_InvalidContext(t *testing.T) {
 		t.Fatal("expected error for invalid context")
 	}
 }
+
+func TestManifestValidation_RenderSizeOverride(t *testing.T) {
+	cases := []struct {
+		name          string
+		width, height int
+		wantErr       bool
+	}{
+		{"both", 512, 128, false},
+		{"neither", 0, 0, false},
+		{"width only", 512, 0, true},
+		{"negative", -1, 128, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pkgDir := filepath.Join(t.TempDir(), "rsize")
+			_ = os.MkdirAll(pkgDir, 0755)
+			writeJSONFile(t, filepath.Join(pkgDir, "screens", "main.json"), sampleValidDisplay())
+
+			m := manifest.Manifest{
+				ManifestVersion: 1,
+				ID:              "rsize",
+				Name:            "Render Size",
+				Screens: []manifest.Screen{
+					{
+						ID:    "main",
+						File:  "screens/main.json",
+						Title: "Main",
+						Pose: &manifest.Pose{
+							Position:     []float64{0, -0.2, -0.5},
+							WidthM:       0.24,
+							HeightM:      0.06,
+							RenderWidth:  tc.width,
+							RenderHeight: tc.height,
+						},
+					},
+				},
+			}
+			writeJSONFile(t, filepath.Join(pkgDir, "manifest.json"), m)
+
+			_, errs := manifest.ValidatePackage(pkgDir)
+			if tc.wantErr && len(errs) == 0 {
+				t.Fatal("expected render size validation error")
+			}
+			if !tc.wantErr && len(errs) > 0 {
+				t.Fatalf("expected no errors, got: %v", errs)
+			}
+		})
+	}
+}
