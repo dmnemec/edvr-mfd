@@ -105,7 +105,7 @@ std::string serializeEventToJson(const MfdEventRecord& record) {
         j["guiFocus"] = record.guiFocus;
     }
 
-    if (record.type == "select" || !record.action.empty()) {
+    if (record.type == "select" || record.type == "back" || !record.action.empty()) {
         if (!record.action.empty()) {
             j["action"] = record.action;
         }
@@ -298,6 +298,22 @@ MfdEventRecord MfdEventRecord::createSelect(const std::string& packageId, const 
     r.packageId = packageId;
     r.screen = screen;
     r.type = "select";
+    r.tab = tab;
+    r.index = index;
+    r.itemId = itemId;
+    r.label = label;
+    r.action = action;
+    return r;
+}
+
+MfdEventRecord MfdEventRecord::createBack(const std::string& packageId, const std::string& screen,
+                                         const std::string& tab, int index,
+                                         const std::string& itemId, const std::string& label,
+                                         const std::string& action) {
+    MfdEventRecord r;
+    r.packageId = packageId;
+    r.screen = screen;
+    r.type = "back";
     r.tab = tab;
     r.index = index;
     r.itemId = itemId;

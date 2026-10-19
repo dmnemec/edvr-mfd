@@ -58,6 +58,8 @@ public:
     using TabChangeCallback = std::function<void(const std::string& tabId, int tabIndex)>;
     using NavCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, int repeatCount)>;
     using SelectCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value)>;
+    // itemIndex is -1 and ids/labels empty when no item is focused (empty or text tab).
+    using BackCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value)>;
     using AdjustCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& key, int delta, int repeatCount)>;
 
     explicit DeclarativeMfdProvider(std::string id, std::string defaultTitle = "NAV MFD")
@@ -97,6 +99,10 @@ public:
 
     void setSelectCallback(SelectCallback cb) {
         m_selectCallback = std::move(cb);
+    }
+
+    void setBackCallback(BackCallback cb) {
+        m_backCallback = std::move(cb);
     }
 
     void setAdjustCallback(AdjustCallback cb) {
@@ -189,6 +195,30 @@ public:
                 }
             }
         }
+        if (hasAction(action, MfdInputAction::kBack)) {
+            // Back has no built-in navigation: report the press (with the focused item's backAction).
+            auto* tab = m_model.currentTab();
+            if (tab && m_backCallback) {
+                std::string tabId = tab->id.empty() ? tab->title : tab->id;
+                int sel = tab->selectedIndex;
+                auto actStr = [](MfdItemAction a) { return a == MfdItemAction::kClipboard ? "clipboard" : "event"; };
+                try {
+                    if (tab->type == MfdTabType::kList && sel >= 0 && sel < static_cast<int>(tab->items.size())) {
+                        const auto& item = tab->items[sel];
+                        m_backCallback(tabId, sel, item.id, item.label, actStr(item.backAction), item.value);
+                    } else if (tab->type == MfdTabType::kKeyValue && sel >= 0 && sel < static_cast<int>(tab->keyValues.size())) {
+                        const auto& kv = tab->keyValues[sel];
+                        m_backCallback(tabId, sel, kv.id, kv.key, actStr(kv.backAction), kv.value);
+                    } else if (tab->type == MfdTabType::kBars && sel >= 0 && sel < static_cast<int>(tab->barItems.size())) {
+                        const auto& bar = tab->barItems[sel];
+                        m_backCallback(tabId, sel, bar.id, bar.label, "event", "");
+                    } else {
+                        m_backCallback(tabId, -1, "", "", "event", "");
+                    }
+                } catch (...) {}
+            }
+            return true;
+        }
         if (hasAction(action, MfdInputAction::kSelect)) {
             auto* tab = m_model.currentTab();
             if (tab) {
@@ -251,6 +281,7 @@ private:
     TabChangeCallback m_tabChangeCallback;
     NavCallback m_navCallback;
     SelectCallback m_selectCallback;
+    BackCallback m_backCallback;
     AdjustCallback m_adjustCallback;
     UpdateHook m_updateHook;
     int m_repeatCount = 0;  // >0 while dispatching a held-direction repeat (#17)

@@ -246,6 +246,44 @@ func TestSerializationRoundTrip(t *testing.T) {
 	}
 }
 
+func TestBackActionValidation(t *testing.T) {
+	build := func(listBack, kvBack string) display.Display {
+		return display.Display{
+			SchemaVersion: 1,
+			Title:         "T",
+			Tabs: []display.Tab{
+				{ID: "l", Title: "L", Type: display.TabTypeList, Items: []display.Item{{ID: "a", Label: "A", BackAction: listBack}}},
+				{ID: "k", Title: "K", Type: display.TabTypeKeyValue, KeyValues: []display.KeyValue{{ID: "x", Key: "X", Value: "1", BackAction: kvBack}}},
+			},
+		}
+	}
+
+	for _, ok := range []string{"", display.ActionEvent, display.ActionClipboard} {
+		d := build(ok, ok)
+		if err := display.Validate(&d); err != nil {
+			t.Errorf("backAction %q should be valid, got %v", ok, err)
+		}
+	}
+
+	d := build("bogus", "")
+	if err := display.Validate(&d); err == nil || !strings.Contains(err.Error(), "backAction") {
+		t.Errorf("expected backAction error for list item, got %v", err)
+	}
+	d = build("", "bogus")
+	if err := display.Validate(&d); err == nil || !strings.Contains(err.Error(), "backAction") {
+		t.Errorf("expected backAction error for key-value item, got %v", err)
+	}
+
+	var parsed display.Display
+	raw := `{"schemaVersion":1,"title":"T","tabs":[{"id":"l","title":"L","type":"list","items":[{"id":"a","label":"A","backAction":"clipboard"}]}]}`
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if parsed.Tabs[0].Items[0].BackAction != display.ActionClipboard {
+		t.Errorf("BackAction not parsed: %+v", parsed.Tabs[0].Items[0])
+	}
+}
+
 func TestValidationErrors(t *testing.T) {
 	validDisplay := func() display.Display {
 		return display.Display{

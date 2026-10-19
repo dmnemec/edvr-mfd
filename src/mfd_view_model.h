@@ -80,6 +80,7 @@ struct MfdListItem {
     MfdIcon icon = MfdIcon::kNone;
     std::vector<MfdCheckItem> checks;
     MfdItemAction action = MfdItemAction::kEvent;
+    MfdItemAction backAction = MfdItemAction::kEvent;  // Run on Back press
 
     MfdListItem() = default;
     MfdListItem(std::string id_, std::string label_, std::string value_ = "", std::string sublabel_ = "", std::string badge_ = "")
@@ -98,6 +99,7 @@ struct MfdKeyValue {
     std::string valueColorName = "normal";
     MfdNamedColor valueNamedColor = MfdNamedColor::kNormal;
     MfdItemAction action = MfdItemAction::kEvent;
+    MfdItemAction backAction = MfdItemAction::kEvent;  // Run on Back press
 
     MfdKeyValue() = default;
     MfdKeyValue(std::string k, std::string v, MfdColor vc = palette::kAmberNormal)

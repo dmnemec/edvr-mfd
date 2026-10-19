@@ -382,6 +382,21 @@ void MfdManager::setupScreenCallbacks(MfdScreen& screen) {
         if (scr) scr->isDirty = true;
     });
 
+    decl->setBackCallback([this, pkgId, scrId, qId](const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value) {
+        // SETTINGS input stays local; Back there does nothing. No built-in navigation otherwise.
+        if (tabId == "__settings") return;
+        if (action == "clipboard") {
+            copyToClipboard(value.empty() ? itemLabel : value);
+        }
+        if (!pkgId.empty()) {
+            EventWriter::instance().enqueue(
+                MfdEventRecord::createBack(pkgId, scrId, tabId, itemIndex, itemId, itemLabel, action)
+            );
+        }
+        auto* scr = findScreen(qId);
+        if (scr) scr->isDirty = true;
+    });
+
     decl->setAdjustCallback([this, pkgId, scrId, qId](const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& key, int delta, int repeatCount) {
         (void)itemIndex; (void)itemId; (void)itemLabel;
         auto* scr = findScreen(qId);
