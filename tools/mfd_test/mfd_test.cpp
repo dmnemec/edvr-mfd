@@ -3253,6 +3253,207 @@ int test_pov_decode_and_scroll_window() {
     return 0;
 }
 
+// 25. Hold-to-repeat for directions with an injected clock (#17)
+namespace {
+struct RecordingProvider : DeclarativeMfdProvider {
+    struct Rec { MfdInputAction action; int repeat; uint64_t t; };
+    std::vector<Rec> recs;
+    uint64_t now = 0;
+    bool inRepeat = false;
+    explicit RecordingProvider(const char* id) : DeclarativeMfdProvider(id) {}
+    bool onInput(MfdInputAction a) override {
+        if (!inRepeat) recs.push_back({a, 0, now});
+        return DeclarativeMfdProvider::onInput(a);
+    }
+    bool onInputRepeat(MfdInputAction a, int n) override {
+        recs.push_back({a, n, now});
+        inRepeat = true;
+        bool r = DeclarativeMfdProvider::onInputRepeat(a, n);
+        inRepeat = false;
+        return r;
+    }
+};
+
+struct Held { bool up = false, down = false, left = false, right = false, sel = false, back = false, next = false, prev = false; };
+bool stepRouter(MfdInputRouter& r, IMfdProvider& p, uint64_t t, const Held& h, bool focused = true) {
+    return r.processInput(focused, &p, h.up, h.down, h.left, h.right, h.sel, h.back, h.next, h.prev, t);
+}
+} // namespace
+
+int test_hold_to_repeat() {
+    // Timing curve
+    TEST_CHECK(MfdRepeatTiming::intervalAt(0) == 80 && MfdRepeatTiming::intervalAt(1999) == 80, "Interval is 80 ms for the first 2 s of repeating");
+    TEST_CHECK(MfdRepeatTiming::intervalAt(2000) == 80, "Ramp starts at 80 ms");
+    TEST_CHECK(MfdRepeatTiming::intervalAt(3500) == 60, "Ramp is linear (60 ms halfway)");
+    TEST_CHECK(MfdRepeatTiming::intervalAt(5000) == 40 && MfdRepeatTiming::intervalAt(60000) == 40, "Interval settles at 40 ms");
+
+    // Hold Down from t=0 in 1 ms steps
+    {
+        MfdInputRouter router;
+        RecordingProvider prov("rep");
+        prov.onFocusChanged(true);
+        Held h;
+        stepRouter(router, prov, 0, h);
+        h.down = true;
+        for (uint64_t t = 0; t <= 8000; ++t) { prov.now = t; stepRouter(router, prov, t, h); }
+        TEST_CHECK(prov.recs.size() > 3, "Held Down produces repeats");
+        TEST_CHECK(prov.recs[0].t == 0 && prov.recs[0].repeat == 0, "Press fires immediately, unmarked");
+        TEST_CHECK(prov.recs[1].t == 400 && prov.recs[1].repeat == 1 && prov.recs[1].action == MfdInputAction::kDown,
+                   "First repeat at 400 ms, count 1 (nothing at 399)");
+        TEST_CHECK(prov.recs[2].t == 480, "Second repeat 80 ms after the first");
+        bool counts = true, firstPhase = true, ramp = true, fast = true;
+        uint64_t firstRepeatT = prov.recs[1].t;
+        for (size_t i = 1; i < prov.recs.size(); ++i) {
+            counts = counts && prov.recs[i].repeat == static_cast<int>(i);
+            if (i >= 2) {
+                uint64_t gap = prov.recs[i].t - prov.recs[i - 1].t;
+                uint64_t el = prov.recs[i - 1].t - firstRepeatT;
+                if (el < 2000) firstPhase = firstPhase && gap == 80;
+                else if (el < 5000) ramp = ramp && gap <= 80 && gap >= 40 && gap == MfdRepeatTiming::intervalAt(el);
+                else fast = fast && gap == 40;
+            }
+        }
+        TEST_CHECK(counts, "repeatCount increases 1,2,3...");
+        TEST_CHECK(firstPhase, "80 ms intervals during the first 2 s of repeating");
+        TEST_CHECK(ramp, "Intervals ease from 80 to 40 ms over the next 3 s");
+        TEST_CHECK(fast, "40 ms intervals after 5 s of repeating");
+
+        // Release stops; immediate re-press fires at once and restarts the delay
+        size_t n = prov.recs.size();
+        h.down = false;
+        prov.now = 8001; stepRouter(router, prov, 8001, h);
+        prov.now = 8500; stepRouter(router, prov, 8500, h);
+        TEST_CHECK(prov.recs.size() == n, "Release stops repeats");
+        h.down = true;
+        prov.now = 8501; stepRouter(router, prov, 8501, h);
+        TEST_CHECK(prov.recs.size() == n + 1 && prov.recs.back().repeat == 0, "Re-press fires immediately");
+        prov.now = 8900; stepRouter(router, prov, 8900, h);
+        TEST_CHECK(prov.recs.size() == n + 1, "Re-press restarts the 400 ms delay");
+        prov.now = 8901; stepRouter(router, prov, 8901, h);
+        TEST_CHECK(prov.recs.size() == n + 2 && prov.recs.back().repeat == 1, "Repeat count restarts at 1");
+    }
+
+    // Non-direction actions never repeat
+    {
+        MfdInputRouter router;
+        RecordingProvider prov("rep2");
+        prov.onFocusChanged(true);
+        Held h;
+        stepRouter(router, prov, 0, h);
+        h.sel = h.back = h.next = h.prev = true;
+        for (uint64_t t = 0; t <= 2000; t += 10) stepRouter(router, prov, t, h);
+        TEST_CHECK(prov.recs.size() == 1 && prov.recs[0].repeat == 0, "Select/Back/Next/Prev held 2 s produce exactly one action");
+    }
+
+    // Two held directions: only the most recent repeats; releasing it does not resume the older one
+    {
+        MfdInputRouter router;
+        RecordingProvider prov("rep3");
+        prov.onFocusChanged(true);
+        Held h;
+        stepRouter(router, prov, 0, h);
+        h.up = true;
+        prov.now = 0; stepRouter(router, prov, 0, h);
+        h.right = true;
+        prov.now = 100; stepRouter(router, prov, 100, h);
+        for (uint64_t t = 101; t <= 1000; ++t) { prov.now = t; stepRouter(router, prov, t, h); }
+        bool onlyRight = true;
+        for (size_t i = 2; i < prov.recs.size(); ++i) onlyRight = onlyRight && prov.recs[i].action == MfdInputAction::kRight;
+        TEST_CHECK(prov.recs.size() > 3 && onlyRight, "Only the most recently pressed direction repeats");
+        TEST_CHECK(prov.recs[2].t == 500 && prov.recs[2].repeat == 1, "Newest press restarts the delay (400 ms after t=100)");
+        size_t n = prov.recs.size();
+        h.right = false;
+        for (uint64_t t = 1001; t <= 3000; ++t) { prov.now = t; stepRouter(router, prov, t, h); }
+        TEST_CHECK(prov.recs.size() == n, "Releasing the newest does not resume the older held direction");
+    }
+
+    // A slow frame yields at most one repeat; no catch-up burst afterwards
+    {
+        MfdInputRouter router;
+        RecordingProvider prov("rep4");
+        prov.onFocusChanged(true);
+        Held h;
+        stepRouter(router, prov, 0, h);
+        h.left = true;
+        stepRouter(router, prov, 0, h);
+        stepRouter(router, prov, 700, h);
+        TEST_CHECK(prov.recs.size() == 2, "300 ms frame gap past the delay emits one repeat only");
+        stepRouter(router, prov, 701, h);
+        TEST_CHECK(prov.recs.size() == 2, "No catch-up repeat on the next frame");
+        stepRouter(router, prov, 1001, h);
+        TEST_CHECK(prov.recs.size() == 3, "Schedule resumes at the normal interval after the gap");
+    }
+
+    // Focus loss cancels repeat; input still swallowed while focused
+    {
+        MfdInputRouter router;
+        RecordingProvider prov("rep5");
+        prov.onFocusChanged(true);
+        Held h;
+        stepRouter(router, prov, 0, h);
+        h.down = true;
+        TEST_CHECK(stepRouter(router, prov, 0, h), "Press swallowed");
+        TEST_CHECK(stepRouter(router, prov, 500, h) && prov.recs.size() == 2, "Held direction swallowed and repeating while focused");
+        TEST_CHECK(!stepRouter(router, prov, 600, h, false), "Not swallowed once focus is lost");
+        stepRouter(router, prov, 5000, h, false);
+        stepRouter(router, prov, 5100, h, true);
+        stepRouter(router, prov, 6000, h, true);
+        TEST_CHECK(prov.recs.size() == 2, "Focus loss cancels repeat; a key held across refocus does not resume");
+    }
+
+    // Provider: nav/adjust callbacks carry the repeat count; holding Right sweeps a key/value item
+    {
+        MfdInputRouter router;
+        DeclarativeMfdProvider prov("rep6");
+        prov.loadFromJson(R"JSON({
+            "tabs": [
+                { "id": "L", "title": "LIST", "type": "list", "items": [
+                    {"id":"a","label":"A"},{"id":"b","label":"B"},{"id":"c","label":"C"},{"id":"d","label":"D"},
+                    {"id":"e","label":"E"},{"id":"f","label":"F"},{"id":"g","label":"G"},{"id":"h","label":"H"}] },
+                { "id": "K", "title": "KV", "type": "keyvalue", "items": [ {"id":"r","key":"Custom Red (R)","value":"10"} ] }
+            ]
+        })JSON");
+        prov.onFocusChanged(true);
+        std::vector<int> navRepeats, adjRepeats;
+        int adjSum = 0;
+        prov.setNavCallback([&](const std::string&, int, const std::string&, const std::string&, int rc) { navRepeats.push_back(rc); });
+        prov.setAdjustCallback([&](const std::string&, int, const std::string&, const std::string&, const std::string&, int delta, int rc) {
+            adjRepeats.push_back(rc);
+            adjSum += delta;
+        });
+        Held h;
+        stepRouter(router, prov, 0, h);
+        h.down = true;
+        for (uint64_t t = 0; t <= 900; ++t) stepRouter(router, prov, t, h);
+        TEST_CHECK(navRepeats.size() >= 4 && navRepeats[0] == 0 && navRepeats[1] == 1 && navRepeats[2] == 2,
+                   "nav callbacks: press unmarked (0), repeats count 1, 2, ...");
+        h.down = false;
+        stepRouter(router, prov, 901, h);
+        prov.viewModel().activeTabIndex = 1;
+        h.right = true;
+        for (uint64_t t = 1000; t <= 3000; ++t) stepRouter(router, prov, t, h);
+        TEST_CHECK(adjRepeats.size() > 20 && adjRepeats[0] == 0 && adjRepeats[1] == 1 && adjRepeats.back() == static_cast<int>(adjRepeats.size()) - 1,
+                   "adjust callbacks sweep while Right is held, repeatCount increasing");
+        TEST_CHECK(adjSum == static_cast<int>(adjRepeats.size()), "Each repeat applies delta +1 (no separate presses)");
+    }
+
+    // Event record: presses omit repeat fields; repeats carry them; round-trips
+    {
+        MfdEventRecord press = MfdEventRecord::createNav("p", "s", "t", 1, "id", "lbl");
+        MfdEventRecord rep = MfdEventRecord::createNav("p", "s", "t", 2, "id", "lbl", 3);
+        MfdEventRecord adj = MfdEventRecord::createAdjust("p", "s", "t", 0, "id", "lbl", "k", 1, 2);
+        std::string pj = serializeEventToJson(press), rj = serializeEventToJson(rep), aj = serializeEventToJson(adj);
+        TEST_CHECK(pj.find("\"repeat\"") == std::string::npos && pj.find("repeatCount") == std::string::npos, "Press event JSON omits repeat fields");
+        TEST_CHECK(rj.find("\"repeat\":true") != std::string::npos && rj.find("\"repeatCount\":3") != std::string::npos, "Repeat nav JSON has repeat:true and repeatCount");
+        TEST_CHECK(aj.find("\"repeat\":true") != std::string::npos && aj.find("\"repeatCount\":2") != std::string::npos, "Repeat adjust JSON has repeat:true and repeatCount");
+        MfdEventRecord parsed;
+        TEST_CHECK(parseEventFromJson(rj, parsed) && parsed.repeatCount == 3, "repeatCount parses back");
+        MfdEventRecord parsedPress;
+        TEST_CHECK(parseEventFromJson(pj, parsedPress) && parsedPress.repeatCount == 0, "Press parses back with repeatCount 0");
+    }
+    return 0;
+}
+
 int main() {
     std::cout << "[mfd_test] Running Cockpit MFD framework test suite..." << std::endl;
 
@@ -3330,6 +3531,9 @@ int main() {
 
     if (test_pov_decode_and_scroll_window() != 0) return 1;
     std::cout << "  ok  Hatless Controller POV (#13) & Selection Scroll Window (#14)" << std::endl;
+
+    if (test_hold_to_repeat() != 0) return 1;
+    std::cout << "  ok  Hold-to-Repeat Directions, Injected Clock & Repeat-Marked Events (#17)" << std::endl;
 
     std::cout << "[mfd_test] ALL TESTS PASSED." << std::endl;
     ExitProcess(0);
