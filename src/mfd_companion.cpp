@@ -2,6 +2,7 @@
 #include "mfd_display_schema.h"
 #include "mfd_context.h"
 #include "log.h"
+#include "mfd_version.h"
 
 #include <windows.h>
 #include <wincrypt.h>
@@ -499,7 +500,7 @@ bool CompanionSupervisor::launchCompanionLocked(ManagedPackage& pkg, ManagedComp
     envVars[L"EDVR_MFD_SESSION"] = utf8ToWide(m_sessionUuid);
     envVars[L"EDVR_MFD_EVENTS"] = (EventWriter::instance().isRunning() ?
         EventWriter::instance().getPackageEventsPath(pkg.id) : (pkg.packageDir + L"\\events.jsonl"));
-    envVars[L"EDVR_MFD_PLUGIN_VERSION"] = L"1.0.0";
+    envVars[L"EDVR_MFD_PLUGIN_VERSION"] = EDVR_MFD_VERSION_W;
 
     for (const auto& kv : comp.manifest.env) {
         envVars[utf8ToWide(kv.first)] = utf8ToWide(kv.second);

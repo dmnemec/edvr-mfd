@@ -5,6 +5,7 @@
 #include "edvr_plugin_api.h"
 #include "config.h"
 #include "log.h"
+#include "mfd_version.h"
 
 #if __has_include(<openxr/openxr.h>)
 #include <openxr/openxr.h>
@@ -367,7 +368,7 @@ int EDVR_API mfdPluginInit(const EdvrHostServices* host) {
         }
     }
 
-    Log::get().note("mfd_plugin: initialized Cockpit MFD Addon v1.0 (enabled=%d, packages=%zu)\n",
+    Log::get().note("mfd_plugin: initialized Cockpit MFD Addon v%s (enabled=%d, packages=%zu)\n", EDVR_MFD_VERSION,
                     s_cockpitMfdEnabled.load() ? 1 : 0, packages.size());
     return 0;
 }
@@ -455,7 +456,7 @@ extern "C" __declspec(dllexport) int EDVR_API EdvrPluginRegister(uint32_t hostAp
     }
 
     outCallbacks->pluginName = "Cockpit MFD";
-    outCallbacks->pluginVersion = "1.0.0";
+    outCallbacks->pluginVersion = EDVR_MFD_VERSION;
     outCallbacks->onInitialize = edvr::mfd::mfdPluginInit;
     outCallbacks->onShutdown = edvr::mfd::mfdPluginShutdown;
     outCallbacks->onUpdate = edvr::mfd::mfdPluginUpdate;

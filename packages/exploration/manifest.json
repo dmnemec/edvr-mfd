@@ -6,7 +6,7 @@
   "version": "1.0.0",
   "author": "EDVR MFD",
   "description": "System cartography and exobiology survey readouts",
-  "minPluginVersion": "1.0.0",
+  "minPluginVersion": "0.1.0",
   "screens": [
     {
       "id": "exploration",

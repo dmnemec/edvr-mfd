@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Package release artifact for EDVR Cockpit MFD (Multi-Function Display) plugin.
-Validates all packages using `mfdkit validate` and packages `edvr-mfd-v1.0.0.zip`.
+Validates all packages using `mfdkit validate` and packages `edvr-mfd-v<version>.zip`.
 """
 
 import argparse
@@ -219,7 +219,7 @@ def self_test():
 
 def main():
     parser = argparse.ArgumentParser(description="Package EDVR MFD Release Artifact")
-    parser.add_argument("--version", default="1.0.0", help="Release version (default: 1.0.0)")
+    parser.add_argument("--version", default="0.1.0-rc.1", help="Release version (default: 0.1.0-rc.1)")
     parser.add_argument("--output", "-o", help="Output zip path (default: dist/edvr-mfd-v<version>.zip)")
     parser.add_argument("--skip-validate", action="store_true", help="Skip mfdkit validate check")
     parser.add_argument("--self-test", action="store_true", help="Run internal self-tests and exit")

@@ -1,4 +1,4 @@
-# EDVR Cockpit MFD (Multi-Function Display) Addon — v1.0.0
+# EDVR Cockpit MFD (Multi-Function Display) Addon — v0.1.0 (pre-release)
 
 Interactive, contextual, vector-drawn in-cockpit MFD displays for **Elite Dangerous: Odyssey in VR**, powered by EDVR's OpenXR native plugin architecture.
 
@@ -6,16 +6,16 @@ Interactive, contextual, vector-drawn in-cockpit MFD displays for **Elite Danger
 
 ## Overview & Architecture
 
-EDVR MFD v1.0.0 is a complete platform for extensible, high-performance in-cockpit displays. The plugin operates as a decoupled rendering engine and input router within the EDVR DirectX 11 / OpenXR pipeline, while external Go/Python companion daemons feed real-time telemetry into declarative JSON models.
+EDVR MFD v0.1.0 is a platform for extensible, high-performance in-cockpit displays. The plugin operates as a decoupled rendering engine and input router within the EDVR DirectX 11 / OpenXR pipeline, while external Go/Python companion daemons feed real-time telemetry into declarative JSON models.
 
 ### Host Compatibility
 - **Required Host**: [EDVR Unofficial Patch](https://github.com/characterecho-sean/edvr-unofficial-patch)
-- **Minimum Version**: v0.18.0+
-- **Host Branch**: `feat/third-party-plugins` (Commit Pin: `ececeb3`)
+- **Minimum Version**: EDVR **v0.20.0-rc.3** or later (third-party plugin API v2). Tested with [v0.20.0-rc.5](https://github.com/characterecho-sean/edvr-unofficial-patch/releases/tag/v0.20.0-rc.5). EDVR v0.19.x and earlier have no plugin support.
+- The plugin loads only if the host's plugin API version matches exactly; otherwise it declines to register.
 
 ---
 
-## Bundled v1.0 Packages
+## Bundled Packages
 
 EDVR MFD ships with three fully functional, supervised companion packages located in `plugins/edvr_mfd/mfds/`:
 
@@ -56,7 +56,7 @@ The MFD addon integrates directly into the EDVR F8 in-headset menu under **Cockp
 ## Installation
 
 ### Option A: One-Click Native Installer (Zero Dependencies)
-Download and unzip `edvr-mfd-v1.0.0.zip`, then double-click `install_mfd.exe`:
+Download and unzip `edvr-mfd-v<version>.zip` from [Releases](https://github.com/dmnemec/edvr-mfd/releases), then double-click `install_mfd.exe`:
 - **Auto-Detects**: Scans the Windows Registry and Steam library folders (`libraryfolders.vdf`), Epic Games, Frontier Launchers, and common drives to locate your Elite Dangerous Odyssey folder automatically.
 - **Verifies EDVR**: Confirms the EDVR host (`d3d11.dll`) is installed.
 - **Zero Python Required**: Single standalone Windows executable.
@@ -80,7 +80,7 @@ Flags available:
 - `--force`: Force overwrite bundled packages even if target version is >= repo version.
 
 ### Option C: Manual Extraction
-Extract the contents of `edvr-mfd-v1.0.0.zip` directly into your Elite Dangerous product folder:
+Extract the contents of `edvr-mfd-v<version>.zip` directly into your Elite Dangerous product folder:
 ```text
 <Elite Dangerous Odyssey Product Folder>\
     d3d11.dll
@@ -132,7 +132,7 @@ Work is tracked in [GitHub Issues](https://github.com/dmnemec/edvr-mfd/issues). 
 ```cmd
 python tools\package_release.py
 ```
-This validates all packages using `mfdkit validate` and packages `dist\edvr-mfd-v1.0.0.zip`.
+This validates all packages using `mfdkit validate` and packages `dist\edvr-mfd-v<version>.zip`.
 
 ---
 
