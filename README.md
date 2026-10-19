@@ -111,14 +111,22 @@ Extract the contents of `edvr-mfd-v1.0.0.zip` directly into your Elite Dangerous
 ### Prerequisites
 - Windows 10/11
 - Visual Studio 2019/2022 (MSVC C++ Desktop Development)
-- Go 1.22+ (via WSL or Windows)
 - Python 3.8+
+- Go 1.22+, either for Windows or inside WSL. `build.bat` picks, in order:
+  1. `EDVR_GO`, if set to the full path of a `go.exe`;
+  2. `go` on the Windows PATH;
+  3. Go inside WSL: the login shell's PATH, plus `/usr/local/go/bin`.
+
+  Until [#16](https://github.com/dmnemec/edvr-mfd/issues/16) is fixed, three companion tests fail under native Windows Go, so WSL Go is recommended for now.
 
 ### Compile Plugin & Run Tests
 ```cmd
 build.bat
 ```
-This builds `build\plugins\edvr_mfd\plugin.dll`, executes C++ unit tests (`build\mfd_test.exe`), runs Go companion tests via WSL, and verifies tool self-tests.
+The script can be run from any directory. It verifies the tool self-tests, builds `build\plugins\edvr_mfd\plugin.dll`, runs the C++ unit tests (`build\mfd_test.exe`) and the Go companion tests, and builds `build\tools\install_mfd.exe`.
+
+### Contributing
+Work is tracked in [GitHub Issues](https://github.com/dmnemec/edvr-mfd/issues). Coding agents (Claude Code, Gemini CLI, and others) and human contributors should read [AGENTS.md](AGENTS.md) first. It covers the build, the claim-before-you-start rule, and why work stops at `needs-test-flight`.
 
 ### Create Release ZIP
 ```cmd
@@ -132,7 +140,7 @@ This validates all packages using `mfdkit validate` and packages `dist\edvr-mfd-
 
 - **[MFD Authoring Guide](docs/mfd-authoring-guide.md)**: Manifest schema v1, display schema v1, companion integration, and testing with `mfdkit`.
 - **[Cockpit MFD Architecture](docs/cockpit-mfd-architecture.md)**: Rendering pipeline, input routing, OpenXR compositor integration, and companion supervision.
-- **[Issue Tracker](docs/ISSUES.md)**: Current bug tracking and resolution history.
+- **[Issue Tracker](https://github.com/dmnemec/edvr-mfd/issues)**: Current bugs and planned work. [docs/ISSUES.md](docs/ISSUES.md) archives MFD-001…MFD-018 and their root-cause analyses.
 
 ## License
 

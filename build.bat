@@ -1,5 +1,7 @@
 @echo off
 setlocal
+rem All paths below are relative to the repo root, wherever the script is launched from.
+cd /d "%~dp0"
 
 echo [edvr-mfd] Running tool self-tests...
 python tools\install_mfd.py --self-test
@@ -29,6 +31,8 @@ if not exist "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" (
     exit /b 1
 )
 
+rem vcvars64 calls vswhere by name; put its folder on PATH so it doesn't print "not recognized".
+for %%d in ("%VSWHERE%") do set "PATH=%PATH%;%%~dpd"
 call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul
 
 :compiler_found
@@ -67,17 +71,57 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+rem Go toolchain: EDVR_GO (path to go.exe) if set, else Windows Go on PATH, else Go inside WSL.
+rem WSL's login shell PATH is used, plus the default /usr/local/go/bin install location.
+set "WSL_GO_PATH=export PATH=$PATH:/usr/local/go/bin"
+rem Detection uses goto, not if/else: "exit /b 1" inside an if/else block returns 0 to the caller.
+set "GO_MODE="
+if not defined EDVR_GO goto go_detect
+if not exist "%EDVR_GO%" (
+    echo [edvr-mfd] ERROR: EDVR_GO is set to "%EDVR_GO%", which does not exist.
+    exit /b 1
+)
+set "GO_MODE=native"
+set "GO_EXE=%EDVR_GO%"
+goto go_found
+:go_detect
+where go >nul 2>&1 && set "GO_MODE=native" && set "GO_EXE=go"
+if defined GO_MODE goto go_found
+where wsl >nul 2>&1 && wsl --exec bash -lc "%WSL_GO_PATH%; command -v go >/dev/null" && set "GO_MODE=wsl"
+:go_found
+if not defined GO_MODE (
+    echo [edvr-mfd] ERROR: Go not found. Install Go 1.22+ for Windows ^(https://go.dev/dl/^) or inside WSL, or set EDVR_GO to go.exe.
+    exit /b 1
+)
+echo [edvr-mfd] Using Go via %GO_MODE%.
+
 echo [edvr-mfd] Running companion Go unit tests...
-wsl -- bash -lc "cd /mnt/c/Users/csasn/github.com/dmnemec/edvr-mfd/companion && /usr/local/go/bin/go test ./..."
-if %errorlevel% neq 0 (
+set "GO_FAIL="
+if "%GO_MODE%"=="native" (
+    pushd companion
+    "%GO_EXE%" test ./... || set "GO_FAIL=1"
+    popd
+) else (
+    wsl --cd "%~dp0companion" --exec bash -lc "%WSL_GO_PATH%; go test ./..." || set "GO_FAIL=1"
+)
+if defined GO_FAIL (
     echo [edvr-mfd] ERROR: Companion Go unit tests failed.
     exit /b 1
 )
 
 echo [edvr-mfd] Building native install_mfd.exe...
 if not exist "build\tools" mkdir "build\tools"
-wsl -- bash -lc "cd /mnt/c/Users/csasn/github.com/dmnemec/edvr-mfd/companion && GOOS=windows GOARCH=amd64 /usr/local/bin/go build -trimpath -ldflags='-s -w' -o ../build/tools/install_mfd.exe ./cmd/installer"
-if %errorlevel% neq 0 (
+set "GO_FAIL="
+if "%GO_MODE%"=="native" (
+    pushd companion
+    set "GOOS=windows"
+    set "GOARCH=amd64"
+    "%GO_EXE%" build -trimpath -ldflags="-s -w" -o ..\build\tools\install_mfd.exe .\cmd\installer || set "GO_FAIL=1"
+    popd
+) else (
+    wsl --cd "%~dp0companion" --exec bash -lc "%WSL_GO_PATH%; GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../build/tools/install_mfd.exe ./cmd/installer" || set "GO_FAIL=1"
+)
+if defined GO_FAIL (
     echo [edvr-mfd] ERROR: Failed to build native install_mfd.exe
     exit /b 1
 )

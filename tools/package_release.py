@@ -40,13 +40,25 @@ def validate_package(repo_root, pkg_dir):
         else:
             return False, res.stderr.strip() or res.stdout.strip()
 
-    # 2. WSL fallback
+    companion_dir = os.path.join(repo_root, "companion")
+
+    # 2. Windows Go: EDVR_GO (path to go.exe) or go on PATH, same order as build.bat
+    native_go = os.environ.get("EDVR_GO") or shutil.which("go")
+    if native_go:
+        cmd = [native_go, "run", "./cmd/mfdkit", "validate", os.path.abspath(pkg_dir)]
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=companion_dir)
+        if res.returncode == 0:
+            print(f"[package_release] validated (go): {pkg_dir}")
+            return True, res.stdout.strip()
+        else:
+            return False, res.stderr.strip() or res.stdout.strip()
+
+    # 3. WSL fallback: Go from the login shell PATH, plus the default /usr/local/go/bin
     if shutil.which("wsl"):
-        wsl_comp = to_wsl_path(os.path.join(repo_root, "companion"))
         wsl_pkg = to_wsl_path(pkg_dir)
         cmd = [
-            "wsl", "--", "bash", "-lc",
-            f"cd '{wsl_comp}' && /usr/local/go/bin/go run ./cmd/mfdkit validate '{wsl_pkg}'"
+            "wsl", "--cd", os.path.abspath(companion_dir), "--exec", "bash", "-lc",
+            f"export PATH=$PATH:/usr/local/go/bin; go run ./cmd/mfdkit validate '{wsl_pkg}'"
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode == 0:
@@ -55,7 +67,7 @@ def validate_package(repo_root, pkg_dir):
         else:
             return False, res.stderr.strip() or res.stdout.strip()
 
-    return False, "mfdkit executable not found and WSL is unavailable"
+    return False, "mfdkit not found: build it, put Go on PATH (or set EDVR_GO), or install Go in WSL"
 
 
 def create_release_zip(repo_root, output_zip_path, skip_validate=False):

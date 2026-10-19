@@ -6,13 +6,16 @@ The expensive resource on this project is not tokens, it is **test flights**. Ev
 
 ## Shell
 
-Use the **PowerShell tool**, not Bash. Windows PowerShell 5.1 (same host machine as edvr-unofficial-patch): no `&&` or `||` (use `;` and `if ($?)`), no ternary, no `??`. Don't redirect a native exe's stderr with `2>&1` — 5.1 wraps each line in an ErrorRecord and sets `$?` false on a clean exit.
+Commands in this file are **Windows PowerShell 5.1**, not Bash or `cmd.exe`, whatever your agent's shell tool is called. If your tool runs `cmd.exe` or Bash, wrap each command as `powershell -NoProfile -Command "..."`. In 5.1: no `&&` or `||` (use `;` and `if ($?)`), no ternary, no `??`. Don't redirect a native exe's stderr with `2>&1`: 5.1 wraps each line in an ErrorRecord and sets `$?` false on a clean exit.
 
-`build.bat` must be launched **by absolute path**; a `cmd` invocation that never ran the batch still exits 0, which reads as a successful build.
+`build.bat` must be launched **by absolute path**; a `cmd` invocation that never ran the batch still exits 0, which reads as a successful build. When editing `build.bat`: `exit /b 1` inside an `if (...) else (...)` block returns **0** to the caller. Use `goto` labels instead (see its Go detection).
 
 ## Build and install
 
-- **Build**: `cmd /c "C:\Users\csasn\github.com\dmnemec\edvr-mfd\build.bat"` (must run by absolute path)
+The absolute paths below are the **owner's machine**. On another machine, substitute your clone and game directory.
+
+- **Prerequisites**: Visual Studio 2019/2022 C++ build tools, Python 3.8+, Go 1.22+. `build.bat` uses `EDVR_GO` (path to `go.exe`) if set, else Go on the Windows PATH, else Go inside WSL. Until #16 is fixed, three companion tests fail under native Windows Go; WSL Go passes.
+- **Build**: `cmd /c "C:\Users\csasn\github.com\dmnemec\edvr-mfd\build.bat"` (must run by absolute path; works from any working directory)
 - **Install**: `python "C:\Users\csasn\github.com\dmnemec\edvr-mfd\tools\install_mfd.py" --target "D:\SteamLibrary\steamapps\common\Elite Dangerous\Products\elite-dangerous-odyssey-64"` (supports `--dry-run`)
 - **Verify install**: compare PE timestamp of installed `plugins\edvr_mfd\plugin.dll` against the build output.
 - **Host requirement**: the EDVR host must also be installed for the plugin to load (see below).
@@ -48,7 +51,7 @@ Source is in `src\`, the plugin ABI in `include\`, tooling in `tools\`, and desi
 - `docs\ISSUES.md` — frozen archive of MFD-001…MFD-018 and their root-cause analyses. Read-only.
 - `include\log.h` — Win32 HANDLE logger, NOT CRT stdio (see MFD-R001 in `docs/ISSUES.md`).
 - `include\edvr_plugin_api.h` — shared with the host; see constraints below.
-- `src\mfd_compositor.h` — `OpenXrQuadCompositor` is a stub that only holds pose/pixel data; the host does the compositing.
+- `src\mfd_compositor.h` — `OpenXrQuadCompositor` is a stub that only holds pose/pixel data and isn't what puts screens in the headset. The plugin draws each screen itself: `MfdManager::renderToEyeRtv` rasterizes a textured quad into the eye render target the host passes to `onRenderEye`. There's no OpenXR quad layer.
 
 ## Critical constraints
 
@@ -62,12 +65,19 @@ Source is in `src\`, the plugin ABI in `include\`, tooling in `tools\`, and desi
 
 All bugs and open work items live in **GitHub Issues** (`dmnemec/edvr-mfd`), managed with `gh`. `docs/ISSUES.md` is a frozen archive (MFD-001…MFD-018): read it for past RCAs, never add to it.
 
-Several developers and agents may work at once; an issue's **assignee** owns it. **Before starting any work:**
-1. `gh issue list --state open` — pick an issue labelled `ready-for-agent` (or `ready-for-human` if you are one) **with no assignee**.
-2. Claim it as your first write: `gh issue edit <n> --add-assignee @me --add-label in-progress --remove-label ready-for-agent`. If someone else is assigned, pick another issue.
+Several developers and agents may work at once. Agents usually share the owner's `gh` login, so the **assignee can't tell agents apart**. Ownership is the **latest claim comment** that has no release comment after it. **Before starting any work:**
+1. `gh issue list --state open`: pick an issue labelled `ready-for-agent` (or `ready-for-human` if you are one) that is **not** `in-progress` and has no assignee.
+2. Claim it as your first write, both steps:
+   - `gh issue edit <n> --add-assignee @me --add-label in-progress --remove-label ready-for-agent`
+   - `gh issue comment <n> --body "Claimed by <agent> (<model>), session <id or start time>"`, e.g. `Claimed by gemini-cli (gemini-2.5-pro), session 2026-10-20T14:05`.
+   
+   Then re-read the comments. If an earlier unreleased claim exists, it wins: comment `Released by <agent>: claimed concurrently`, leave the labels, and pick another issue. Never work on an issue whose current claim isn't yours.
 3. For bugs, comment the hypothesis and the specific log line or telemetry field that would confirm it, before editing code.
 4. Code pushed but not yet flown: swap `in-progress` for `needs-test-flight`.
 5. Verified: commit with `Fixes #<n>` in the message, push, and confirm the issue closed (or `gh issue close <n> --comment "<hash>"`).
+6. Abandoning work: comment `Released by <agent>: <what you learned>`, remove `in-progress`, restore the triage label, and remove the assignee.
+
+Agents can't fly: an agent's finished state is step 4, `needs-test-flight`, with a comment listing exactly what the owner should check in the headset and which log lines confirm it.
 
 Do not start work that has no issue. If you find a new bug, `gh issue create --label needs-triage --label bug` first. Labels and claim rules: `docs/agents/triage-labels.md`, `docs/agents/issue-tracker.md`.
 
