@@ -14,7 +14,7 @@ Commands in this file are **Windows PowerShell 5.1**, not Bash or `cmd.exe`, wha
 
 The absolute paths below are the **owner's machine**. On another machine, substitute your clone and game directory.
 
-- **Prerequisites**: Visual Studio 2019/2022 C++ build tools, Python 3.8+, Go 1.22+. `build.bat` uses `EDVR_GO` (path to `go.exe`) if set, else Go on the Windows PATH, else Go inside WSL. Until #16 is fixed, three companion tests fail under native Windows Go; WSL Go passes.
+- **Prerequisites**: Visual Studio 2019/2022 C++ build tools, Python 3.8+, Go 1.22+. `build.bat` uses `EDVR_GO` (path to `go.exe`) if set, else Go on the Windows PATH, else Go inside WSL. Until #16 is fixed, two companion tests fail under native Windows Go; WSL Go passes.
 - **Build**: `cmd /c "C:\Users\csasn\github.com\dmnemec\edvr-mfd\build.bat"` (must run by absolute path; works from any working directory)
 - **Install**: `python "C:\Users\csasn\github.com\dmnemec\edvr-mfd\tools\install_mfd.py" --target "D:\SteamLibrary\steamapps\common\Elite Dangerous\Products\elite-dangerous-odyssey-64"` (supports `--dry-run`)
 - **Verify install**: compare PE timestamp of installed `plugins\edvr_mfd\plugin.dll` against the build output.

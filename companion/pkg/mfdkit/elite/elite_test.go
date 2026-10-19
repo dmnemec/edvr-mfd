@@ -951,33 +951,28 @@ func TestWatchModuleInfo_PluralAndFallback(t *testing.T) {
 	}
 }
 
+// Opt-in smoke test against a real Saved Games folder: set EDVR_MFD_SAVED_GAMES to the
+// Elite Dangerous journal directory. It reads live game files, so it must not assert
+// anything that changes between flights, and stays out of default runs (#16).
 func TestRealSavedGamesFolder(t *testing.T) {
-	candidateDirs := []string{
-		`C:\Users\csasn\Saved Games\Frontier Developments\Elite Dangerous`,
-		`/mnt/c/Users/csasn/Saved Games/Frontier Developments/Elite Dangerous`,
-	}
-
-	var savedGamesDir string
-	for _, d := range candidateDirs {
-		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
-			savedGamesDir = d
-			break
-		}
-	}
-
+	savedGamesDir := os.Getenv("EDVR_MFD_SAVED_GAMES")
 	if savedGamesDir == "" {
-		t.Skip("skipping real saved games test: directory not found")
+		t.Skip("set EDVR_MFD_SAVED_GAMES to run against a real Saved Games folder")
+	}
+	if fi, err := os.Stat(savedGamesDir); err != nil || !fi.IsDir() {
+		t.Fatalf("EDVR_MFD_SAVED_GAMES=%q is not a directory", savedGamesDir)
 	}
 
-	// 1. Verify FindLatestJournal finds Journal.2026-10-16T001949.01.log
+	// 1. FindLatestJournal returns some journal (which one is covered by fixture tests)
 	latest, err := FindLatestJournal(savedGamesDir)
 	if err != nil {
 		t.Fatalf("FindLatestJournal on real folder failed: %v", err)
 	}
 	base := filepath.Base(latest)
-	if !strings.HasPrefix(base, "Journal.2026-10-16T") {
-		t.Errorf("expected latest journal for 2026-10-16, got %s", base)
+	if !strings.HasPrefix(base, "Journal.") || !strings.HasSuffix(base, ".log") {
+		t.Errorf("expected a Journal.*.log file, got %s", base)
 	}
+	t.Logf("Latest real journal: %s", base)
 
 	// 2. Verify ModulesInfo.json can be read and parsed
 	modPath := filepath.Join(savedGamesDir, "ModulesInfo.json")

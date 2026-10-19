@@ -117,7 +117,7 @@ Extract the contents of `edvr-mfd-v1.0.0.zip` directly into your Elite Dangerous
   2. `go` on the Windows PATH;
   3. Go inside WSL: the login shell's PATH, plus `/usr/local/go/bin`.
 
-  Until [#16](https://github.com/dmnemec/edvr-mfd/issues/16) is fixed, three companion tests fail under native Windows Go, so WSL Go is recommended for now.
+  Until [#16](https://github.com/dmnemec/edvr-mfd/issues/16) is fixed, two companion tests fail under native Windows Go, so WSL Go is recommended for now.
 
 ### Compile Plugin & Run Tests
 ```cmd
