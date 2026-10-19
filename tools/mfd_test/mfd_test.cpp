@@ -3164,6 +3164,95 @@ int test_screen_render_size_and_axis_factors() {
     return 0;
 }
 
+// 24. Hatless controllers don't hold Up (#13); selection stays inside the rendered rows (#14)
+int test_pov_decode_and_scroll_window() {
+    // #13: a device without a hat reports dwPOV = 0, which must not read as Up
+    bool up = false, right = false, down = false, left = false;
+    MfdInputRouter::decodePov(false, 0, up, right, down, left);
+    TEST_CHECK(!up && !right && !down && !left, "Hatless device at dwPOV=0 produces no direction");
+    MfdInputRouter::decodePov(true, 0, up, right, down, left);
+    TEST_CHECK(up && !down, "Real hat at 0 reads as Up");
+    up = right = down = left = false;
+    MfdInputRouter::decodePov(true, 65535 /* JOY_POVCENTERED */, up, right, down, left);
+    TEST_CHECK(!up && !right && !down && !left, "Centred hat produces no direction");
+    MfdInputRouter::decodePov(true, 18000, up, right, down, left);
+    TEST_CHECK(down && !up, "Hat at 180 deg reads as Down");
+
+    // A held hatless device must not block keyboard Up edges
+    MfdInputRouter router;
+    DeclarativeMfdProvider prov("nav_test", "NAV");
+    prov.loadFromJson(R"({"tabs":[{"title":"L","type":"list","items":[{"label":"A"},{"label":"B"},{"label":"C"}]}]})");
+    prov.onFocusChanged(true);
+    router.processInput(true, &prov, false, true, false, false, false, false, false, false);   // Down
+    router.processInput(true, &prov, false, false, false, false, false, false, false, false);
+    TEST_CHECK(prov.viewModel().currentTab()->selectedIndex == 1, "Down moved to row 1");
+    router.processInput(true, &prov, true, false, false, false, false, false, false, false);   // Up
+    TEST_CHECK(prov.viewModel().currentTab()->selectedIndex == 0, "Up edge moved back to row 0");
+
+    // #14: the renderer and selection logic agree on visible rows at every height
+    MfdRenderer r341(512, 341);
+    MfdTab kvTab;
+    kvTab.type = MfdTabType::kKeyValue;
+    for (int i = 0; i < 20; ++i) kvTab.keyValues.push_back({"Key " + std::to_string(i), "v", palette::kAmberNormal});
+    TEST_CHECK(kvTab.visibleRows(r341.height()) == (341 - kStdKeyValueTop - kStdFooterHeight) / kStdKeyValueRowHeight,
+               "Key-value visible rows match renderer formula at 341 px");
+    TEST_CHECK(kvTab.visibleRows(0) == 11, "Unknown height keeps legacy key-value count");
+
+    const int heights[] = {384, 341, 171};
+    for (int h : heights) {
+        MfdViewModel vm;
+        vm.renderHeight = h;
+        vm.tabs.push_back(kvTab);
+        int rows = vm.tabs[0].visibleRows(h);
+        for (int step = 0; step < 19; ++step) {
+            vm.moveSelection(1);
+            const auto& t = vm.tabs[0];
+            TEST_CHECK(t.selectedIndex >= t.scrollOffset && t.selectedIndex < t.scrollOffset + rows,
+                       "Selection stays inside visible rows while moving down");
+        }
+        for (int step = 0; step < 19; ++step) {
+            vm.moveSelection(-1);
+            const auto& t = vm.tabs[0];
+            TEST_CHECK(t.selectedIndex >= t.scrollOffset && t.selectedIndex < t.scrollOffset + rows,
+                       "Selection stays inside visible rows while moving up");
+        }
+        TEST_CHECK(vm.tabs[0].selectedIndex == 0 && vm.tabs[0].scrollOffset == 0, "Back at the top");
+    }
+
+    // Lists with sublabels use the taller row
+    MfdTab subList;
+    subList.type = MfdTabType::kList;
+    MfdListItem withSub;
+    withSub.label = "Row";
+    withSub.sublabel = "detail";
+    subList.items.push_back(withSub);
+    TEST_CHECK(subList.visibleRows(341) == (341 - kStdContentTop - kStdFooterHeight) / kStdListSublabelRowHeight,
+               "Sublabel list uses 36 px rows");
+
+    // Display reload keeps the screen height and keeps the restored selection visible
+    MfdViewModel prevVm;
+    prevVm.renderHeight = 171;
+    MfdTab prevTab = kvTab;
+    for (int i = 0; i < 20; ++i) prevTab.keyValues[i].id = "k" + std::to_string(i);
+    prevTab.id = "kv";
+    prevTab.selectedIndex = 9;
+    prevTab.scrollOffset = 2; // stale offset from a taller screen
+    prevVm.tabs.push_back(prevTab);
+    MfdViewModel newVm;
+    MfdTab newTab = prevTab;
+    newTab.selectedIndex = 0;
+    newTab.scrollOffset = 0;
+    newVm.tabs.push_back(newTab);
+    MfdContentWatcher::restoreCursor(prevVm, newVm);
+    int rows171 = newVm.tabs[0].visibleRows(171);
+    TEST_CHECK(newVm.renderHeight == 171, "Reload carries render height");
+    TEST_CHECK(newVm.tabs[0].selectedIndex == 9, "Reload restores selection by id");
+    TEST_CHECK(newVm.tabs[0].selectedIndex >= newVm.tabs[0].scrollOffset &&
+               newVm.tabs[0].selectedIndex < newVm.tabs[0].scrollOffset + rows171,
+               "Reload keeps restored selection visible on a short screen");
+    return 0;
+}
+
 int main() {
     std::cout << "[mfd_test] Running Cockpit MFD framework test suite..." << std::endl;
 
@@ -3238,6 +3327,9 @@ int main() {
 
     if (test_screen_render_size_and_axis_factors() != 0) return 1;
     std::cout << "  ok  Per-Screen Render Size, Manifest Override & Width/Height Settings (#4)" << std::endl;
+
+    if (test_pov_decode_and_scroll_window() != 0) return 1;
+    std::cout << "  ok  Hatless Controller POV (#13) & Selection Scroll Window (#14)" << std::endl;
 
     std::cout << "[mfd_test] ALL TESTS PASSED." << std::endl;
     ExitProcess(0);

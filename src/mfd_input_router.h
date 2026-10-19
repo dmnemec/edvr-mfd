@@ -71,6 +71,10 @@ public:
     void pollJoystickInputs(bool& up, bool& down, bool& left, bool& right,
                             bool& sel, bool& back, bool& next, bool& prev);
 
+    // Map one device's POV reading onto hat directions. A device without a hat must be
+    // ignored: winmm leaves its dwPOV at 0, which would otherwise read as Up held (#13).
+    static void decodePov(bool deviceHasPov, uint32_t dwPov, bool& up, bool& right, bool& down, bool& left);
+
     // Convenience poller using virtual keys, joystick/vJoy devices, and external key-state checker.
     // isKeyDownFn is a predicate (e.g. [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; })
     template <typename Fn>
@@ -103,6 +107,10 @@ public:
 
 private:
     MfdBindingsConfig m_bindings;
+
+    // Per winmm device id: -1 unknown (re-query caps), 0 no hat, 1 has hat.
+    static constexpr unsigned kMaxJoyDevices = 16;
+    int8_t m_devHasPov[kMaxJoyDevices] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
     // Previous frame down states for rising-edge detection:
     bool m_prevUp = false;

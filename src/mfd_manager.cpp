@@ -329,6 +329,9 @@ void MfdManager::applyScreenSize(MfdScreen& screen) {
     } else {
         return;
     }
+    if (screen.provider) {
+        screen.provider->viewModel().renderHeight = size.height;
+    }
     screen.isDirty = true;
     screen.needsGpuUpload = true;
 }
@@ -1179,6 +1182,10 @@ void MfdManager::update(const Vec3& headPos, const Vec3& headForward, float dtSe
 
     // 2. Live content updates via ContentWatcher (Ticket A3)
     for (auto& scr : m_screens) {
+        if (scr.provider && scr.renderer) {
+            // Selection scrolling must use the same visible-row count as the renderer (#14)
+            scr.provider->viewModel().renderHeight = scr.renderer->height();
+        }
         if (m_contentWatcher && !scr.packageId.empty() && scr.provider) {
             if (m_contentWatcher->swapIfUpdated(scr.packageId, scr.screenId, scr.contentGeneration, scr.provider->viewModel())) {
                 scr.isDirty = true;

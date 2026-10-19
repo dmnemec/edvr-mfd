@@ -208,34 +208,45 @@ void MfdInputRouter::reloadBindingsFromGame() {
 void MfdInputRouter::pollJoystickInputs(bool& up, bool& down, bool& left, bool& right,
                                         bool& sel, bool& back, bool& next, bool& prev) {
     UINT numDevs = joyGetNumDevs();
-    if (numDevs > 16) numDevs = 16;
+    if (numDevs > kMaxJoyDevices) numDevs = kMaxJoyDevices;
     for (UINT i = 0; i < numDevs; ++i) {
         JOYINFOEX ji{};
         ji.dwSize = sizeof(JOYINFOEX);
         ji.dwFlags = JOY_RETURNALL;
+        ji.dwPOV = JOY_POVCENTERED;
         if (joyGetPosEx(i, &ji) == JOYERR_NOERROR) {
-            // Check POV Hat (dwPOV: hundredths of degrees, 65535 = centered)
-            if (ji.dwPOV != 65535 && ji.dwPOV <= 36000) {
-                if (ji.dwPOV >= 31500 || ji.dwPOV <= 4500) {
-                    if (m_bindings.up.povUp) up = true;
-                }
-                if (ji.dwPOV >= 4500 && ji.dwPOV <= 13500) {
-                    if (m_bindings.right.povRight) right = true;
-                }
-                if (ji.dwPOV >= 13500 && ji.dwPOV <= 22500) {
-                    if (m_bindings.down.povDown) down = true;
-                }
-                if (ji.dwPOV >= 22500 && ji.dwPOV <= 31500) {
-                    if (m_bindings.left.povLeft) left = true;
-                }
+            if (m_devHasPov[i] < 0) {
+                JOYCAPSW caps{};
+                bool hasPov = joyGetDevCapsW(i, &caps, sizeof(caps)) == JOYERR_NOERROR && (caps.wCaps & JOYCAPS_HASPOV) != 0;
+                m_devHasPov[i] = hasPov ? 1 : 0;
+                Log::get().note("mfd_input: joystick %u '%ls' buttons=%u hat=%d\n",
+                                i, caps.szPname, caps.wNumButtons, hasPov ? 1 : 0);
             }
+
+            bool povUp = false, povRight = false, povDown = false, povLeft = false;
+            decodePov(m_devHasPov[i] == 1, ji.dwPOV, povUp, povRight, povDown, povLeft);
+            if (povUp && m_bindings.up.povUp) up = true;
+            if (povRight && m_bindings.right.povRight) right = true;
+            if (povDown && m_bindings.down.povDown) down = true;
+            if (povLeft && m_bindings.left.povLeft) left = true;
             // Check dynamically mapped button bitmasks
             if (ji.dwButtons & m_bindings.select.joyButtonMask) sel = true;
             if (ji.dwButtons & m_bindings.back.joyButtonMask) back = true;
             if (ji.dwButtons & m_bindings.nextTab.joyButtonMask) next = true;
             if (ji.dwButtons & m_bindings.prevTab.joyButtonMask) prev = true;
+        } else {
+            m_devHasPov[i] = -1; // Unplugged: re-read caps if a device appears at this id again
         }
     }
+}
+
+void MfdInputRouter::decodePov(bool deviceHasPov, uint32_t dwPov, bool& up, bool& right, bool& down, bool& left) {
+    // dwPOV is hundredths of degrees clockwise from forward; JOY_POVCENTERED (65535) = released.
+    if (!deviceHasPov || dwPov == JOY_POVCENTERED || dwPov > 36000) return;
+    if (dwPov >= 31500 || dwPov <= 4500) up = true;
+    if (dwPov >= 4500 && dwPov <= 13500) right = true;
+    if (dwPov >= 13500 && dwPov <= 22500) down = true;
+    if (dwPov >= 22500 && dwPov <= 31500) left = true;
 }
 
 bool MfdInputRouter::processInput(bool isMfdFocused, IMfdProvider* activeProvider,

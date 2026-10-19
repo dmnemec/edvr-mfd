@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mfd_types.h"
+#include "mfd_screen_size.h"
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -133,6 +134,39 @@ struct MfdTab {
 
     // For kBars tabs:
     std::vector<MfdBarItem> barItems;
+
+    // Rows the standard renderer shows for this tab at renderHeight (#14). 0 = height
+    // unknown (e.g. a model not attached to a screen): the pre-#4 fixed counts.
+    int visibleRows(int renderHeight) const {
+        switch (type) {
+            case MfdTabType::kList: {
+                if (renderHeight <= 0) return 8;
+                bool hasAnySublabel = false;
+                for (const auto& item : items) {
+                    if (!item.sublabel.empty()) { hasAnySublabel = true; break; }
+                }
+                return standardVisibleRows(renderHeight, kStdContentTop,
+                                           hasAnySublabel ? kStdListSublabelRowHeight : kStdListRowHeight);
+            }
+            case MfdTabType::kKeyValue:
+                if (renderHeight <= 0) return 11;
+                return standardVisibleRows(renderHeight, kStdKeyValueTop, kStdKeyValueRowHeight);
+            case MfdTabType::kBars:
+                if (renderHeight <= 0) return 8;
+                return standardVisibleRows(renderHeight, kStdContentTop, kStdBarRowHeight);
+            default:
+                return 1;
+        }
+    }
+
+    // Scroll just enough that selectedIndex is inside the visible window.
+    void keepSelectionVisible(int rows) {
+        if (selectedIndex < scrollOffset) {
+            scrollOffset = selectedIndex;
+        } else if (selectedIndex >= scrollOffset + rows) {
+            scrollOffset = selectedIndex - rows + 1;
+        }
+    }
 };
 
 // Complete structured view model representing one MFD screen.
@@ -159,6 +193,9 @@ struct MfdViewModel {
     // Focus appearance:
     bool isFocused = false;
 
+    // Render height of the screen showing this model, kept current by MfdManager (0 = unknown).
+    int renderHeight = 0;
+
     // Helper accessors:
     MfdTab* currentTab() {
         if (activeTabIndex >= 0 && activeTabIndex < static_cast<int>(tabs.size())) {
@@ -184,7 +221,7 @@ struct MfdViewModel {
         activeTabIndex = (activeTabIndex - 1 + static_cast<int>(tabs.size())) % static_cast<int>(tabs.size());
     }
 
-    void moveSelection(int delta, int visibleRows = 8) {
+    void moveSelection(int delta) {
         auto* tab = currentTab();
         if (!tab) return;
 
@@ -195,13 +232,7 @@ struct MfdViewModel {
                 newIdx = static_cast<int>(tab->items.size()) - 1;
             }
             tab->selectedIndex = newIdx;
-
-            // Ensure selection is visible within viewport
-            if (tab->selectedIndex < tab->scrollOffset) {
-                tab->scrollOffset = tab->selectedIndex;
-            } else if (tab->selectedIndex >= tab->scrollOffset + visibleRows) {
-                tab->scrollOffset = tab->selectedIndex - visibleRows + 1;
-            }
+            tab->keepSelectionVisible(tab->visibleRows(renderHeight));
         } else if (tab->type == MfdTabType::kKeyValue && !tab->keyValues.empty()) {
             int newIdx = tab->selectedIndex + delta;
             if (newIdx < 0) newIdx = 0;
@@ -209,14 +240,7 @@ struct MfdViewModel {
                 newIdx = static_cast<int>(tab->keyValues.size()) - 1;
             }
             tab->selectedIndex = newIdx;
-
-            // Ensure selection is visible within viewport
-            int kvVisibleRows = 11;
-            if (tab->selectedIndex < tab->scrollOffset) {
-                tab->scrollOffset = tab->selectedIndex;
-            } else if (tab->selectedIndex >= tab->scrollOffset + kvVisibleRows) {
-                tab->scrollOffset = tab->selectedIndex - kvVisibleRows + 1;
-            }
+            tab->keepSelectionVisible(tab->visibleRows(renderHeight));
         } else if (tab->type == MfdTabType::kBars && !tab->barItems.empty()) {
             int newIdx = tab->selectedIndex + delta;
             if (newIdx < 0) newIdx = 0;
@@ -224,13 +248,7 @@ struct MfdViewModel {
                 newIdx = static_cast<int>(tab->barItems.size()) - 1;
             }
             tab->selectedIndex = newIdx;
-
-            int barsVisibleRows = 8;
-            if (tab->selectedIndex < tab->scrollOffset) {
-                tab->scrollOffset = tab->selectedIndex;
-            } else if (tab->selectedIndex >= tab->scrollOffset + barsVisibleRows) {
-                tab->scrollOffset = tab->selectedIndex - barsVisibleRows + 1;
-            }
+            tab->keepSelectionVisible(tab->visibleRows(renderHeight));
         } else if (tab->type == MfdTabType::kText && !tab->lines.empty()) {
             int newScroll = tab->textScrollLine + delta;
             if (newScroll < 0) newScroll = 0;

@@ -58,13 +58,28 @@ inline bool renderAspectMismatch(int renderWidth, int renderHeight, float widthM
     return std::abs(ratio - 1.0f) > kAspectMismatchTolerance;
 }
 
+// Standard layout metrics, shared by the renderer and by selection scrolling so the
+// highlighted row can never sit below the last visible row (#14).
+constexpr int kStdContentTop = 72;              // Header + tab bar
+constexpr int kStdKeyValueTop = 74;
+constexpr int kStdFooterHeight = 34;
+constexpr int kStdListRowHeight = 24;
+constexpr int kStdListSublabelRowHeight = 36;
+constexpr int kStdKeyValueRowHeight = 22;
+constexpr int kStdBarRowHeight = 30;
+
+inline int standardVisibleRows(int renderHeight, int contentTop, int rowHeight) {
+    int rows = (renderHeight - contentTop - kStdFooterHeight) / rowHeight;
+    return rows > 0 ? rows : 1;
+}
+
 // Smallest render height at which a template still shows its minimum content.
-// Standard: header + tab bar (72 px), footer (34 px) and one list row with sublabel (36 px).
+// Standard: header + tab bar, footer and one list row with sublabel.
 inline int minContentHeightPx(MfdLayoutTemplate layout) {
     switch (layout) {
         case MfdLayoutTemplate::kStandard:
         default:
-            return 72 + 34 + 36;
+            return kStdContentTop + kStdFooterHeight + kStdListSublabelRowHeight;
     }
 }
 

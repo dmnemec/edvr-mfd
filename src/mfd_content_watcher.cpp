@@ -356,6 +356,7 @@ void MfdContentWatcher::restoreCursor(const MfdViewModel& previousVm, MfdViewMod
     }
 
     newVm.isFocused = previousVm.isFocused;
+    newVm.renderHeight = previousVm.renderHeight;
 
     if (previousVm.tabs.empty()) {
         newVm.activeTabIndex = 0;
@@ -418,14 +419,10 @@ void MfdContentWatcher::restoreCursor(const MfdViewModel& previousVm, MfdViewMod
             }
 
             // Keep selection visible
-            int visibleRows = 8;
+            int visibleRows = newTab.visibleRows(newVm.renderHeight);
             int maxScroll = (std::max)(0, static_cast<int>(newTab.items.size()) - visibleRows);
             newTab.scrollOffset = (std::clamp)(prevTab.scrollOffset, 0, maxScroll);
-            if (newTab.selectedIndex < newTab.scrollOffset) {
-                newTab.scrollOffset = newTab.selectedIndex;
-            } else if (newTab.selectedIndex >= newTab.scrollOffset + visibleRows) {
-                newTab.scrollOffset = newTab.selectedIndex - visibleRows + 1;
-            }
+            newTab.keepSelectionVisible(visibleRows);
         }
     } else if (newTab.type == MfdTabType::kKeyValue) {
         if (newTab.keyValues.empty()) {
@@ -453,14 +450,10 @@ void MfdContentWatcher::restoreCursor(const MfdViewModel& previousVm, MfdViewMod
                 newTab.selectedIndex = (std::clamp)(prevTab.selectedIndex, 0, static_cast<int>(newTab.keyValues.size()) - 1);
             }
 
-            int visibleRows = 11;
+            int visibleRows = newTab.visibleRows(newVm.renderHeight);
             int maxScroll = (std::max)(0, static_cast<int>(newTab.keyValues.size()) - visibleRows);
             newTab.scrollOffset = (std::clamp)(prevTab.scrollOffset, 0, maxScroll);
-            if (newTab.selectedIndex < newTab.scrollOffset) {
-                newTab.scrollOffset = newTab.selectedIndex;
-            } else if (newTab.selectedIndex >= newTab.scrollOffset + visibleRows) {
-                newTab.scrollOffset = newTab.selectedIndex - visibleRows + 1;
-            }
+            newTab.keepSelectionVisible(visibleRows);
         }
     } else if (newTab.type == MfdTabType::kBars) {
         if (newTab.barItems.empty()) {
@@ -488,14 +481,10 @@ void MfdContentWatcher::restoreCursor(const MfdViewModel& previousVm, MfdViewMod
                 newTab.selectedIndex = (std::clamp)(prevTab.selectedIndex, 0, static_cast<int>(newTab.barItems.size()) - 1);
             }
 
-            int visibleRows = 8;
+            int visibleRows = newTab.visibleRows(newVm.renderHeight);
             int maxScroll = (std::max)(0, static_cast<int>(newTab.barItems.size()) - visibleRows);
             newTab.scrollOffset = (std::clamp)(prevTab.scrollOffset, 0, maxScroll);
-            if (newTab.selectedIndex < newTab.scrollOffset) {
-                newTab.scrollOffset = newTab.selectedIndex;
-            } else if (newTab.selectedIndex >= newTab.scrollOffset + visibleRows) {
-                newTab.scrollOffset = newTab.selectedIndex - visibleRows + 1;
-            }
+            newTab.keepSelectionVisible(visibleRows);
         }
     } else if (newTab.type == MfdTabType::kText) {
         int maxScroll = (std::max)(0, static_cast<int>(newTab.lines.size()) - 1);

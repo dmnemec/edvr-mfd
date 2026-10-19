@@ -617,7 +617,7 @@ void MfdRenderer::renderTabs(const MfdViewModel& model, MfdColor mainColor, MfdC
 }
 
 void MfdRenderer::renderListTab(const MfdTab& tab, bool focused, MfdColor mainColor, MfdColor dimColor) {
-    int startY = 72;
+    int startY = kStdContentTop;
     bool hasAnySublabel = false;
     for (const auto& item : tab.items) {
         if (!item.sublabel.empty()) {
@@ -626,9 +626,8 @@ void MfdRenderer::renderListTab(const MfdTab& tab, bool focused, MfdColor mainCo
         }
     }
 
-    int rowH = hasAnySublabel ? 36 : 24;
-    int maxRows = (m_height - startY - 34) / rowH;
-    if (maxRows <= 0) maxRows = 1;
+    int rowH = hasAnySublabel ? kStdListSublabelRowHeight : kStdListRowHeight;
+    int maxRows = tab.visibleRows(m_height);
 
     int totalItems = static_cast<int>(tab.items.size());
     int maxScroll = (std::max)(0, totalItems - maxRows);
@@ -778,10 +777,9 @@ void MfdRenderer::renderListTab(const MfdTab& tab, bool focused, MfdColor mainCo
 
 void MfdRenderer::renderKeyValueTab(const MfdTab& tab, MfdColor mainColor, MfdColor dimColor) {
     (void)mainColor;
-    int startY = 74;
-    int rowH = 22;
-    int maxRows = (m_height - startY - 34) / rowH;
-    if (maxRows <= 0) maxRows = 1;
+    int startY = kStdKeyValueTop;
+    int rowH = kStdKeyValueRowHeight;
+    int maxRows = tab.visibleRows(m_height);
 
     int totalItems = static_cast<int>(tab.keyValues.size());
     int maxScroll = (std::max)(0, totalItems - maxRows);
@@ -845,10 +843,9 @@ void MfdRenderer::renderTextTab(const MfdTab& tab, MfdColor mainColor, MfdColor 
 }
 
 void MfdRenderer::renderBarsTab(const MfdTab& tab, bool focused, MfdColor mainColor, MfdColor dimColor) {
-    int startY = 72;
-    int rowH = 30;
-    int maxRows = (m_height - startY - 34) / rowH;
-    if (maxRows <= 0) maxRows = 1;
+    int startY = kStdContentTop;
+    int rowH = kStdBarRowHeight;
+    int maxRows = tab.visibleRows(m_height);
 
     int totalItems = static_cast<int>(tab.barItems.size());
     int maxScroll = (std::max)(0, totalItems - maxRows);
