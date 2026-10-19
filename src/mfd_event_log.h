@@ -75,6 +75,11 @@ struct MfdEventRecord {
                                        const std::string& tab, int index,
                                        const std::string& itemId, const std::string& label,
                                        const std::string& action = "");
+    // Back press. index is -1 and itemId/label empty when no item is focused.
+    static MfdEventRecord createBack(const std::string& packageId, const std::string& screen,
+                                     const std::string& tab, int index,
+                                     const std::string& itemId, const std::string& label,
+                                     const std::string& action);
     static MfdEventRecord createAdjust(const std::string& packageId, const std::string& screen,
                                        const std::string& tab, int index,
                                        const std::string& itemId, const std::string& label,

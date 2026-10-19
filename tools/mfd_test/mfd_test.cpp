@@ -2884,6 +2884,140 @@ int test_dynamic_screens_cap_and_settings() {
         TEST_CHECK(currentPresetName == "Cyan / Ice", "MFD-009: Preset Theme key-value updated synchronously to 'Cyan / Ice'");
     }
 
+    // 8. Back event (#18): reported with item context, optional backAction, no local navigation
+    {
+        auto readClipText = []() -> std::string {
+            std::string out;
+            for (int retry = 0; retry < 10; ++retry) {
+                if (OpenClipboard(nullptr)) {
+                    HANDLE h = GetClipboardData(CF_TEXT);
+                    if (h) {
+                        const char* p = static_cast<const char*>(GlobalLock(h));
+                        if (p) out = p;
+                        GlobalUnlock(h);
+                    }
+                    CloseClipboard();
+                    break;
+                }
+                Sleep(10);
+            }
+            return out;
+        };
+        auto readEvents = [&]() -> std::string {
+            EventWriter::instance().flush();
+            std::wstring p = EventWriter::instance().getPackageEventsPath("pkg_a");
+            HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            std::string text;
+            if (h != INVALID_HANDLE_VALUE) {
+                DWORD n = GetFileSize(h, nullptr);
+                text.assign(n, '\0');
+                DWORD got = 0;
+                ReadFile(h, &text[0], n, &got, nullptr);
+                CloseHandle(h);
+            }
+            return text;
+        };
+
+        MfdViewModel bvm;
+        bvm.isFocused = true;
+        MfdTab lt;
+        lt.id = "targets"; lt.title = "TARGETS"; lt.type = MfdTabType::kList;
+        MfdListItem i0; i0.id = "plain"; i0.label = "Plain Row"; i0.value = "V0";
+        MfdListItem i1; i1.id = "copyme"; i1.label = "Copy Row"; i1.value = "HIP 999";
+        i1.backAction = MfdItemAction::kClipboard;
+        MfdListItem i2; i2.id = "sel_clip"; i2.label = "SelClip Row"; i2.value = "SELVAL";
+        i2.action = MfdItemAction::kClipboard;  // backAction stays default (event)
+        lt.items.push_back(i0); lt.items.push_back(i1); lt.items.push_back(i2);
+        MfdTab kt;
+        kt.id = "stats"; kt.title = "STATS"; kt.type = MfdTabType::kKeyValue;
+        MfdKeyValue kv0; kv0.id = "cargo"; kv0.key = "Cargo"; kv0.value = "64 T";
+        kv0.backAction = MfdItemAction::kClipboard;
+        kt.keyValues.push_back(kv0);
+        MfdTab tt;
+        tt.id = "notes"; tt.title = "NOTES"; tt.type = MfdTabType::kText;
+        tt.lines.push_back("hello");
+        MfdTab et;
+        et.id = "empty"; et.title = "EMPTY"; et.type = MfdTabType::kList;
+        bvm.tabs.push_back(std::move(lt));
+        bvm.tabs.push_back(std::move(kt));
+        bvm.tabs.push_back(std::move(tt));
+        bvm.tabs.push_back(std::move(et));
+        s0->provider->viewModel() = std::move(bvm);
+        s0->provider->onFocusChanged(true);
+        auto& bm = s0->provider->viewModel();
+
+        // (a) Back on item without backAction: event only, no navigation
+        bm.activeTabIndex = 0;
+        bm.tabs[0].selectedIndex = 0;
+        size_t base = readEvents().size();
+        TEST_CHECK(s0->provider->onInput(MfdInputAction::kBack), "Back is consumed on a package screen");
+        std::string ev = readEvents().substr(base);
+        TEST_CHECK(ev.find("\"type\":\"back\"") != std::string::npos, "Back writes a back event");
+        TEST_CHECK(ev.find("\"tab\":\"targets\"") != std::string::npos, "Back event has tab context");
+        TEST_CHECK(ev.find("\"itemId\":\"plain\"") != std::string::npos, "Back event has item context");
+        TEST_CHECK(ev.find("\"index\":0") != std::string::npos, "Back event has item index");
+        TEST_CHECK(ev.find("\"action\":\"event\"") != std::string::npos, "Back default action is event");
+        TEST_CHECK(bm.activeTabIndex == 0 && bm.tabs[0].selectedIndex == 0, "Back does not change tab or selection");
+
+        // (b) backAction clipboard copies value and reports clipboard
+        bm.tabs[0].selectedIndex = 1;
+        base = readEvents().size();
+        s0->provider->onInput(MfdInputAction::kBack);
+        ev = readEvents().substr(base);
+        TEST_CHECK(readClipText() == "HIP 999", "Back backAction=clipboard copied item value");
+        TEST_CHECK(ev.find("\"itemId\":\"copyme\"") != std::string::npos && ev.find("\"action\":\"clipboard\"") != std::string::npos,
+                   "Back event reports action clipboard");
+        TEST_CHECK(bm.activeTabIndex == 0 && bm.tabs[0].selectedIndex == 1, "Back clipboard does not change tab or selection");
+
+        // Select on an item follows its own action, independent of backAction
+        bm.tabs[0].selectedIndex = 2;
+        s0->provider->onInput(MfdInputAction::kSelect);
+        TEST_CHECK(readClipText() == "SELVAL", "Select still follows item action (clipboard)");
+        s0->provider->onInput(MfdInputAction::kBack);
+        TEST_CHECK(readClipText() == "SELVAL", "Back with default backAction does not touch clipboard");
+
+        // (c) key-value item with backAction clipboard
+        bm.activeTabIndex = 1;
+        bm.tabs[1].selectedIndex = 0;
+        base = readEvents().size();
+        s0->provider->onInput(MfdInputAction::kBack);
+        ev = readEvents().substr(base);
+        TEST_CHECK(readClipText() == "64 T", "Back on key-value copied its value");
+        TEST_CHECK(ev.find("\"itemId\":\"cargo\"") != std::string::npos && ev.find("\"action\":\"clipboard\"") != std::string::npos,
+                   "Back on key-value event reports item and clipboard");
+
+        // (d) text tab and empty list tab: back with tab context, no item
+        for (int ti = 2; ti <= 3; ++ti) {
+            bm.activeTabIndex = ti;
+            base = readEvents().size();
+            s0->provider->onInput(MfdInputAction::kBack);
+            ev = readEvents().substr(base);
+            TEST_CHECK(ev.find("\"type\":\"back\"") != std::string::npos, "Back on item-less tab still emits back");
+            TEST_CHECK(ev.find(ti == 2 ? "\"tab\":\"notes\"" : "\"tab\":\"empty\"") != std::string::npos, "Item-less back has tab context");
+            TEST_CHECK(ev.find("\"index\":-1") != std::string::npos && ev.find("\"itemId\":\"\"") != std::string::npos,
+                       "Item-less back has no item fields");
+            TEST_CHECK(bm.activeTabIndex == ti, "Item-less back does not change tab");
+        }
+
+        // (e) SETTINGS tab: nothing emitted, nothing changed
+        mgr.update(headPos, headFwd, 0.016f);
+        int sIdx = -1;
+        for (size_t t = 0; t < bm.tabs.size(); ++t) {
+            if (bm.tabs[t].id == "__settings") sIdx = static_cast<int>(t);
+        }
+        TEST_CHECK(sIdx >= 0, "Settings tab present for Back test");
+        if (sIdx >= 0) {
+            bm.activeTabIndex = sIdx;
+            bm.tabs[sIdx].selectedIndex = 0;
+            base = readEvents().size();
+            std::string clipBefore = readClipText();
+            s0->provider->onInput(MfdInputAction::kBack);
+            TEST_CHECK(readEvents().size() == base, "Back on SETTINGS tab emits no event");
+            TEST_CHECK(bm.activeTabIndex == sIdx && bm.tabs[sIdx].selectedIndex == 0 && readClipText() == clipBefore,
+                       "Back on SETTINGS tab changes nothing");
+        }
+    }
+
     // Cleanup test files
     mgr.shutdown();
     DeleteFileW((pkgADir + L"\\manifest.json").c_str());
@@ -2896,6 +3030,45 @@ int test_dynamic_screens_cap_and_settings() {
     DeleteFileW(testIni.c_str());
     RemoveDirectoryW(testRoot.c_str());
 
+    return 0;
+}
+
+// Back event (#18): backAction parsing and validation
+int test_back_action_parse() {
+    const char* good = R"({
+        "schemaVersion": 1, "title": "T",
+        "tabs": [
+            { "id": "l", "title": "L", "type": "list", "items": [
+                { "id": "a", "label": "A" },
+                { "id": "b", "label": "B", "backAction": "clipboard" },
+                { "id": "c", "label": "C", "backAction": "event" } ] },
+            { "id": "k", "title": "K", "type": "keyvalue", "items": [
+                { "id": "x", "key": "X", "value": "1", "backAction": "clipboard" } ] }
+        ]
+    })";
+    MfdViewModel vm;
+    MfdParseError err;
+    TEST_CHECK(parseDisplayJson(std::string(good), vm, &err), "backAction display parses");
+    if (vm.tabs.size() == 2) {
+        TEST_CHECK(vm.tabs[0].items[0].backAction == MfdItemAction::kEvent, "backAction defaults to event");
+        TEST_CHECK(vm.tabs[0].items[1].backAction == MfdItemAction::kClipboard, "List backAction clipboard parsed");
+        TEST_CHECK(vm.tabs[0].items[2].backAction == MfdItemAction::kEvent, "List backAction event parsed");
+        TEST_CHECK(vm.tabs[1].keyValues[0].backAction == MfdItemAction::kClipboard, "KV backAction clipboard parsed");
+    }
+
+    const char* badList = R"({"schemaVersion":1,"title":"T","tabs":[{"id":"l","title":"L","type":"list","items":[{"id":"a","label":"A","backAction":"bogus"}]}]})";
+    MfdViewModel vm2; MfdParseError err2;
+    TEST_CHECK(!parseDisplayJson(std::string(badList), vm2, &err2), "Rejects bogus list backAction");
+    TEST_CHECK(err2.message.find("backAction") != std::string::npos, "Bogus backAction error names the field");
+
+    const char* badKv = R"({"schemaVersion":1,"title":"T","tabs":[{"id":"k","title":"K","type":"keyvalue","items":[{"id":"x","key":"X","value":"1","backAction":"bogus"}]}]})";
+    MfdViewModel vm3; MfdParseError err3;
+    TEST_CHECK(!parseDisplayJson(std::string(badKv), vm3, &err3), "Rejects bogus key-value backAction");
+
+    MfdEventRecord rec = MfdEventRecord::createBack("ship", "modules", "t", 2, "id", "Label", "clipboard");
+    std::string json = serializeEventToJson(rec);
+    TEST_CHECK(json.find("\"type\":\"back\"") != std::string::npos && json.find("\"action\":\"clipboard\"") != std::string::npos,
+               "createBack serializes type back with action");
     return 0;
 }
 
@@ -3330,6 +3503,9 @@ int main() {
 
     if (test_pov_decode_and_scroll_window() != 0) return 1;
     std::cout << "  ok  Hatless Controller POV (#13) & Selection Scroll Window (#14)" << std::endl;
+
+    if (test_back_action_parse() != 0) return 1;
+    std::cout << "  ok  Back Event & backAction Parsing (#18)" << std::endl;
 
     std::cout << "[mfd_test] ALL TESTS PASSED." << std::endl;
     ExitProcess(0);

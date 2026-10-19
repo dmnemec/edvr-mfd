@@ -111,6 +111,7 @@ type Item struct {
 	Icon       string  `json:"icon,omitempty"`
 	Checks     []Check `json:"checks,omitempty"`
 	Action     string  `json:"action,omitempty"`
+	BackAction string  `json:"backAction,omitempty"` // Run on Back press; "event" (default) or "clipboard"
 }
 
 // KeyValue represents an entry in a key-value grid tab.
@@ -120,6 +121,7 @@ type KeyValue struct {
 	Value      string `json:"value"`
 	ValueColor string `json:"valueColor,omitempty"`
 	Action     string `json:"action,omitempty"`
+	BackAction string `json:"backAction,omitempty"` // Run on Back press; "event" (default) or "clipboard"
 }
 
 // Bar represents a progress/gauge bar in a bars tab.
@@ -371,6 +373,9 @@ func Validate(d *Display) error {
 			if err := validateStringLen(fmt.Sprintf("tab[%q].item[%q].action", tab.ID, item.ID), item.Action); err != nil {
 				return err
 			}
+			if err := validateBackAction(fmt.Sprintf("tab[%q].item[%q].backAction", tab.ID, item.ID), item.BackAction); err != nil {
+				return err
+			}
 
 			if len(item.Checks) > MaxChecksPerItem {
 				return fmt.Errorf("tab %q item %q has %d checks, exceeding check limit of %d", tab.ID, item.ID, len(item.Checks), MaxChecksPerItem)
@@ -409,6 +414,9 @@ func Validate(d *Display) error {
 			if err := validateStringLen(fmt.Sprintf("tab[%q].kv[%q].action", tab.ID, kv.ID), kv.Action); err != nil {
 				return err
 			}
+			if err := validateBackAction(fmt.Sprintf("tab[%q].kv[%q].backAction", tab.ID, kv.ID), kv.BackAction); err != nil {
+				return err
+			}
 		}
 
 		for bIdx, bar := range tab.Bars {
@@ -433,6 +441,14 @@ func Validate(d *Display) error {
 	}
 
 	return nil
+}
+
+func validateBackAction(field, val string) error {
+	switch val {
+	case "", ActionEvent, ActionClipboard:
+		return nil
+	}
+	return fmt.Errorf("%s must be %q or %q, got %q", field, ActionEvent, ActionClipboard, val)
 }
 
 func validateStringLen(field, val string) error {

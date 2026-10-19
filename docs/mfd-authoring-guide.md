@@ -274,6 +274,22 @@ When a pilot interacts with an item (pressing **Spacebar** / HOTAS trigger):
 
 External tools or companion daemons tail `events.jsonl` to advance waypoints, fetch remote data, or update checklist states.
 
+### Back Event and `backAction`
+
+Pressing **Back** (default Backspace / Escape, or the `UI_Back` binding) while an MFD screen is focused emits a `back` event. Back has **no built-in navigation**: it never changes tab, selection or scroll. Nested menus (Back = go up a level) are implemented by your companion, which reacts to the `back` event by rewriting the screen file.
+
+The `back` event carries the same context fields as `select` (`screen`, `tab`, `index`, `itemId`, `label`) plus `action`:
+```json
+{"seq":12,"type":"back","screen":"route","tab":"jumps","index":2,"itemId":"sys_2","label":"Sol","action":"clipboard"}
+```
+With no focused item (empty tab, text tab) the event still fires with the tab context, `"index":-1` and empty `itemId`/`label`, `"action":"event"`.
+
+List items and key-value items may declare an optional `backAction`, mirroring `action`:
+- `"event"` (default): emit the `back` event only.
+- `"clipboard"`: copy `value` (else `label`) to the clipboard, then emit `back` with `"action":"clipboard"`.
+
+Any other value is a validation error. Select and Back are independent (for example Select = plot route, Back = copy system name). Back on the injected SETTINGS tab does nothing. Bars and text tabs have no `backAction`.
+
 ---
 
 ## 6. Developer Tooling (`mfdkit`)

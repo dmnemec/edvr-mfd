@@ -19,6 +19,7 @@ const (
 	TypeNav              EventType = "nav"
 	TypeSelect           EventType = "select"
 	TypeAdjust           EventType = "adjust"
+	TypeBack             EventType = "back"
 	TypeCompanionStarted EventType = "companion_started"
 	TypeCompanionCrashed EventType = "companion_crashed"
 	TypeCompanionGaveUp  EventType = "companion_gave_up"

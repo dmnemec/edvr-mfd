@@ -59,6 +59,36 @@ func TestEvent_JSONMarshalingAndUnmarshaling(t *testing.T) {
 			},
 		},
 		{
+			name:    "back event with item context and action",
+			rawJSON: fmt.Sprintf(`{"seq":44,"ts":"%s","session":"sess-1","screen":"route","type":"back","tab":"jumps","index":2,"itemId":"sys_2","label":"Sol","key":null,"delta":null,"action":"clipboard"}`, now.Format(time.RFC3339Nano)),
+			expected: events.Event{
+				Seq:     44,
+				TS:      now,
+				Session: "sess-1",
+				Screen:  "route",
+				Type:    events.TypeBack,
+				Tab:     "jumps",
+				Index:   2,
+				ItemID:  "sys_2",
+				Label:   "Sol",
+				Action:  "clipboard",
+			},
+		},
+		{
+			name:    "back event without a focused item",
+			rawJSON: fmt.Sprintf(`{"seq":45,"ts":"%s","session":"sess-1","screen":"route","type":"back","tab":"notes","index":-1,"itemId":"","label":"","key":null,"delta":null,"action":"event"}`, now.Format(time.RFC3339Nano)),
+			expected: events.Event{
+				Seq:     45,
+				TS:      now,
+				Session: "sess-1",
+				Screen:  "route",
+				Type:    events.TypeBack,
+				Tab:     "notes",
+				Index:   -1,
+				Action:  "event",
+			},
+		},
+		{
 			name:    "load_error with flat fields",
 			rawJSON: fmt.Sprintf(`{"seq":2,"ts":"%s","session":"sess-1","type":"load_error","file":"screens/nav.json","line":42,"column":10,"message":"invalid syntax"}`, now.Format(time.RFC3339Nano)),
 			expected: events.Event{

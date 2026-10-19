@@ -445,6 +445,17 @@ bool parseDisplayJson(const char* data,
                         if (itemVal.contains("action") && itemVal["action"].is_string()) {
                             item.action = parseItemAction(itemVal["action"].get<std::string>());
                         }
+                        if (itemVal.contains("backAction")) {
+                            const std::string ba = itemVal["backAction"].is_string() ? itemVal["backAction"].get<std::string>() : std::string();
+                            if (ba != "event" && ba != "clipboard") {
+                                if (outError) {
+                                    findTokenLocation(data, length, "backAction", outError->line, outError->column);
+                                    outError->message = "Invalid 'backAction' (expected \"event\" or \"clipboard\") on item '" + itemId + "' in tab '" + tabId + "'";
+                                }
+                                return false;
+                            }
+                            item.backAction = parseItemAction(ba);
+                        }
                         if (itemVal.contains("checks") && itemVal["checks"].is_array()) {
                             const auto& checksArr = itemVal["checks"];
                             size_t checkCount = checksArr.size();
@@ -523,6 +534,17 @@ bool parseDisplayJson(const char* data,
                         }
                         if (itemVal.contains("action") && itemVal["action"].is_string()) {
                             kv.action = parseItemAction(itemVal["action"].get<std::string>());
+                        }
+                        if (itemVal.contains("backAction")) {
+                            const std::string ba = itemVal["backAction"].is_string() ? itemVal["backAction"].get<std::string>() : std::string();
+                            if (ba != "event" && ba != "clipboard") {
+                                if (outError) {
+                                    findTokenLocation(data, length, "backAction", outError->line, outError->column);
+                                    outError->message = "Invalid 'backAction' (expected \"event\" or \"clipboard\") on item '" + itemId + "' in tab '" + tabId + "'";
+                                }
+                                return false;
+                            }
+                            kv.backAction = parseItemAction(ba);
                         }
                         tab.keyValues.push_back(std::move(kv));
                     }
