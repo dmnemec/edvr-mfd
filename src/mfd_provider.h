@@ -31,6 +31,13 @@ public:
     // Returns true if the action was consumed by the provider.
     virtual bool onInput(MfdInputAction action) = 0;
 
+    // Same as onInput, but for an auto-repeat of a held direction (#17).
+    // repeatCount is 1 for the first repeat. Default: treated as a plain press.
+    virtual bool onInputRepeat(MfdInputAction action, int repeatCount) {
+        (void)repeatCount;
+        return onInput(action);
+    }
+
     // Notification of head-gaze focus changes
     virtual void onFocusChanged(bool focused) = 0;
 
@@ -49,9 +56,9 @@ public:
     using ActionCallback = std::function<void(const std::string& itemId, const std::string& itemLabel)>;
     using KeyValueActionCallback = std::function<void(const std::string& tabTitle, int index, const std::string& key, int adjustDelta)>;
     using TabChangeCallback = std::function<void(const std::string& tabId, int tabIndex)>;
-    using NavCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel)>;
+    using NavCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, int repeatCount)>;
     using SelectCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value)>;
-    using AdjustCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& key, int delta)>;
+    using AdjustCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& key, int delta, int repeatCount)>;
 
     explicit DeclarativeMfdProvider(std::string id, std::string defaultTitle = "NAV MFD")
         : m_id(std::move(id)) {
@@ -110,6 +117,13 @@ public:
         }
     }
 
+    bool onInputRepeat(MfdInputAction action, int repeatCount) override {
+        m_repeatCount = repeatCount > 0 ? repeatCount : 0;
+        bool consumed = onInput(action);
+        m_repeatCount = 0;
+        return consumed;
+    }
+
     bool onInput(MfdInputAction action) override {
         if (!m_model.isFocused) return false;
 
@@ -139,13 +153,13 @@ public:
                 std::string tabId = tab->id.empty() ? tab->title : tab->id;
                 if (tab->type == MfdTabType::kList && tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->items.size())) {
                     const auto& it = tab->items[tab->selectedIndex];
-                    try { m_navCallback(tabId, tab->selectedIndex, it.id, it.label); } catch (...) {}
+                    try { m_navCallback(tabId, tab->selectedIndex, it.id, it.label, m_repeatCount); } catch (...) {}
                 } else if (tab->type == MfdTabType::kKeyValue && tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->keyValues.size())) {
                     const auto& kv = tab->keyValues[tab->selectedIndex];
-                    try { m_navCallback(tabId, tab->selectedIndex, kv.id, kv.key); } catch (...) {}
+                    try { m_navCallback(tabId, tab->selectedIndex, kv.id, kv.key, m_repeatCount); } catch (...) {}
                 } else if (tab->type == MfdTabType::kBars && tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->barItems.size())) {
                     const auto& bar = tab->barItems[tab->selectedIndex];
-                    try { m_navCallback(tabId, tab->selectedIndex, bar.id, bar.label); } catch (...) {}
+                    try { m_navCallback(tabId, tab->selectedIndex, bar.id, bar.label, m_repeatCount); } catch (...) {}
                 }
             }
             return true;
@@ -159,7 +173,7 @@ public:
                     tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->keyValues.size())) {
                     const auto& kv = tab->keyValues[tab->selectedIndex];
                     if (m_adjustCallback) {
-                        try { m_adjustCallback(tabId, tab->selectedIndex, kv.id, kv.key, kv.key, delta); } catch (...) {}
+                        try { m_adjustCallback(tabId, tab->selectedIndex, kv.id, kv.key, kv.key, delta, m_repeatCount); } catch (...) {}
                     }
                     if (m_kvActionCallback) {
                         try { m_kvActionCallback(tab->title, tab->selectedIndex, kv.key, delta); } catch (...) {}
@@ -169,7 +183,7 @@ public:
                            tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->barItems.size())) {
                     const auto& bar = tab->barItems[tab->selectedIndex];
                     if (m_adjustCallback) {
-                        try { m_adjustCallback(tabId, tab->selectedIndex, bar.id, bar.label, bar.label, delta); } catch (...) {}
+                        try { m_adjustCallback(tabId, tab->selectedIndex, bar.id, bar.label, bar.label, delta, m_repeatCount); } catch (...) {}
                     }
                     return true;
                 }
@@ -239,6 +253,7 @@ private:
     SelectCallback m_selectCallback;
     AdjustCallback m_adjustCallback;
     UpdateHook m_updateHook;
+    int m_repeatCount = 0;  // >0 while dispatching a held-direction repeat (#17)
 };
 
 // ============================================================================

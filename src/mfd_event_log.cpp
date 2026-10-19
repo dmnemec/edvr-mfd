@@ -84,6 +84,12 @@ std::string serializeEventToJson(const MfdEventRecord& record) {
         j["delta"] = nullptr;
     }
 
+    // Press events omit both fields; repeats of a held direction carry them (#17).
+    if (record.repeatCount > 0) {
+        j["repeat"] = true;
+        j["repeatCount"] = record.repeatCount;
+    }
+
     // Optional / type-specific extra fields
     if (record.type == "load_error" || !record.file.empty() || record.line > 0 || record.column > 0 || !record.message.empty()) {
         j["file"] = record.file;
@@ -152,6 +158,10 @@ bool parseEventFromJson(const std::string& jsonLine, MfdEventRecord& outRecord, 
         } else {
             outRecord.hasDelta = false;
             outRecord.delta = 0;
+        }
+
+        if (j.contains("repeatCount") && j["repeatCount"].is_number_integer()) {
+            outRecord.repeatCount = j["repeatCount"].get<int>();
         }
 
         if (j.contains("action") && !j["action"].is_null()) {
@@ -266,7 +276,8 @@ MfdEventRecord MfdEventRecord::createTabChange(const std::string& packageId, con
 
 MfdEventRecord MfdEventRecord::createNav(const std::string& packageId, const std::string& screen,
                                         const std::string& tab, int index,
-                                        const std::string& itemId, const std::string& label) {
+                                        const std::string& itemId, const std::string& label,
+                                        int repeatCount) {
     MfdEventRecord r;
     r.packageId = packageId;
     r.screen = screen;
@@ -275,6 +286,7 @@ MfdEventRecord MfdEventRecord::createNav(const std::string& packageId, const std
     r.index = index;
     r.itemId = itemId;
     r.label = label;
+    r.repeatCount = repeatCount;
     return r;
 }
 
@@ -297,7 +309,7 @@ MfdEventRecord MfdEventRecord::createSelect(const std::string& packageId, const 
 MfdEventRecord MfdEventRecord::createAdjust(const std::string& packageId, const std::string& screen,
                                            const std::string& tab, int index,
                                            const std::string& itemId, const std::string& label,
-                                           const std::string& key, int delta) {
+                                           const std::string& key, int delta, int repeatCount) {
     MfdEventRecord r;
     r.packageId = packageId;
     r.screen = screen;
@@ -310,6 +322,7 @@ MfdEventRecord MfdEventRecord::createAdjust(const std::string& packageId, const 
     r.key = key;
     r.hasDelta = true;
     r.delta = delta;
+    r.repeatCount = repeatCount;
     return r;
 }
 

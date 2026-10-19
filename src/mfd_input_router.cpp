@@ -251,7 +251,10 @@ void MfdInputRouter::decodePov(bool deviceHasPov, uint32_t dwPov, bool& up, bool
 
 bool MfdInputRouter::processInput(bool isMfdFocused, IMfdProvider* activeProvider,
                                  bool keyDownUp, bool keyDownDown, bool keyDownLeft, bool keyDownRight,
-                                 bool keyDownSelect, bool keyDownBack, bool keyDownNextTab, bool keyDownPrevTab) {
+                                 bool keyDownSelect, bool keyDownBack, bool keyDownNextTab, bool keyDownPrevTab,
+                                 uint64_t nowMs) {
+    if (nowMs == kNowAuto) nowMs = GetTickCount64();
+
     // Detect rising edges:
     bool edgeUp = keyDownUp && !m_prevUp;
     bool edgeDown = keyDownDown && !m_prevDown;
@@ -276,6 +279,7 @@ bool MfdInputRouter::processInput(bool isMfdFocused, IMfdProvider* activeProvide
 
     // If an MFD is not focused, inputs pass directly to game flight controls:
     if (!isMfdFocused) {
+        m_holdDir = MfdInputAction::kNone;  // losing focus cancels any repeat
         return false;
     }
 
@@ -290,6 +294,42 @@ bool MfdInputRouter::processInput(bool isMfdFocused, IMfdProvider* activeProvide
     if (edgeNextTab) action = action | MfdInputAction::kNextTab;
     if (edgePrevTab) action = action | MfdInputAction::kPrevTab;
 
+    // Hold-to-repeat for directions. The newest press takes over; releasing it
+    // ends repeating (an older held direction does not resume).
+    const struct { MfdInputAction flag; bool edge; bool down; } dirs[] = {
+        {MfdInputAction::kUp, edgeUp, keyDownUp},
+        {MfdInputAction::kDown, edgeDown, keyDownDown},
+        {MfdInputAction::kLeft, edgeLeft, keyDownLeft},
+        {MfdInputAction::kRight, edgeRight, keyDownRight},
+    };
+    bool pressedThisFrame = false;
+    for (const auto& d : dirs) {
+        if (d.edge) {
+            m_holdDir = d.flag;
+            m_nextRepeatMs = nowMs + MfdRepeatTiming::kInitialDelayMs;
+            m_firstRepeatMs = m_nextRepeatMs;
+            m_repeatCount = 0;
+            pressedThisFrame = true;
+        }
+    }
+    bool repeatFired = false;
+    if (m_holdDir != MfdInputAction::kNone) {
+        bool stillDown = false;
+        for (const auto& d : dirs) {
+            if (d.flag == m_holdDir) stillDown = d.down;
+        }
+        if (!stillDown) {
+            m_holdDir = MfdInputAction::kNone;
+        } else if (!pressedThisFrame && nowMs >= m_nextRepeatMs) {
+            // At most one repeat per call; a slow frame never bursts to catch up.
+            ++m_repeatCount;
+            repeatFired = true;
+            uint64_t interval = MfdRepeatTiming::intervalAt(m_nextRepeatMs - m_firstRepeatMs);
+            uint64_t next = m_nextRepeatMs + interval;
+            m_nextRepeatMs = (next > nowMs) ? next : nowMs + interval;
+        }
+    }
+
     bool anyKeyDown = (keyDownUp || keyDownDown || keyDownLeft || keyDownRight ||
                        keyDownSelect || keyDownBack || keyDownNextTab || keyDownPrevTab);
 
@@ -297,6 +337,14 @@ bool MfdInputRouter::processInput(bool isMfdFocused, IMfdProvider* activeProvide
         Log::get().note("mfd_input: routed action mask 0x%04X to provider '%s'\n",
                         static_cast<uint32_t>(action), activeProvider->id());
         activeProvider->onInput(action);
+    }
+
+    if (repeatFired && activeProvider) {
+        if (m_repeatCount == 1 || m_repeatCount % 25 == 0) {
+            Log::get().note("mfd_input: routed repeat action mask 0x%04X (repeat %d) to provider '%s'\n",
+                            static_cast<uint32_t>(m_holdDir), m_repeatCount, activeProvider->id());
+        }
+        activeProvider->onInputRepeat(m_holdDir, m_repeatCount);
     }
 
     // When focused, all UI navigation keys are swallowed to protect ship flight systems

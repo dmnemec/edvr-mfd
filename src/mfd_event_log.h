@@ -30,6 +30,7 @@ struct MfdEventRecord {
     std::string key;                         // Key string (or null in JSON)
     bool hasDelta = false;                   // Whether delta is present
     int delta = 0;                           // Delta int (or null in JSON)
+    int repeatCount = 0;                     // nav/adjust from a held-direction repeat: 1 for the first repeat; 0 = discrete press (#17)
 
     // Optional / type-specific extra fields
     std::string action;                      // Optional action for select (e.g. "clipboard")
@@ -70,7 +71,8 @@ struct MfdEventRecord {
                                           const std::string& tab, int index);
     static MfdEventRecord createNav(const std::string& packageId, const std::string& screen,
                                     const std::string& tab, int index,
-                                    const std::string& itemId, const std::string& label);
+                                    const std::string& itemId, const std::string& label,
+                                    int repeatCount = 0);
     static MfdEventRecord createSelect(const std::string& packageId, const std::string& screen,
                                        const std::string& tab, int index,
                                        const std::string& itemId, const std::string& label,
@@ -78,7 +80,7 @@ struct MfdEventRecord {
     static MfdEventRecord createAdjust(const std::string& packageId, const std::string& screen,
                                        const std::string& tab, int index,
                                        const std::string& itemId, const std::string& label,
-                                       const std::string& key, int delta);
+                                       const std::string& key, int delta, int repeatCount = 0);
     static MfdEventRecord createCompanionStarted(const std::string& packageId, const std::string& companion,
                                                  uint32_t pid, int attempt);
     static MfdEventRecord createCompanionCrashed(const std::string& packageId, const std::string& companion,

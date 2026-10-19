@@ -274,6 +274,18 @@ When a pilot interacts with an item (pressing **Spacebar** / HOTAS trigger):
 
 External tools or companion daemons tail `events.jsonl` to advance waypoints, fetch remote data, or update checklist states.
 
+### Held directions: `repeat` and `repeatCount`
+Holding Up, Down, Left or Right fires once on press, then auto-repeats (first repeat after 400 ms, every 80 ms, easing to 40 ms after about 5 s of repeating). `nav` and `adjust` events produced by a repeat carry two extra fields:
+
+```json
+{"seq":44,"type":"nav","tab":"t","index":3,"itemId":"i3","label":"Item 3","repeat":true,"repeatCount":2}
+```
+
+- `repeat`: `true` on repeats. **Discrete presses omit both fields** (they are never sent as `false`).
+- `repeatCount`: 1 for the first repeat of a hold, then 2, 3, and so on. It restarts at 1 on the next press.
+
+Select, Back and tab-cycling never repeat. The fields are additive; companions that ignore them keep working. Use them to tell a fast scroll from deliberate presses (for example, skip expensive lookups until the selection settles).
+
 ---
 
 ## 6. Developer Tooling (`mfdkit`)

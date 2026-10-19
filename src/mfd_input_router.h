@@ -49,6 +49,23 @@ struct MfdBindingsConfig {
     static MfdBindingsConfig createDefault();
 };
 
+// Hold-to-repeat timing for Up/Down/Left/Right (#17). One place to tune.
+struct MfdRepeatTiming {
+    static constexpr uint64_t kInitialDelayMs = 400;  // press -> first repeat
+    static constexpr uint64_t kSlowIntervalMs = 80;   // interval during the first kSlowPhaseMs of repeating
+    static constexpr uint64_t kSlowPhaseMs = 2000;
+    static constexpr uint64_t kRampMs = 3000;         // linear ease kSlowIntervalMs -> kFastIntervalMs
+    static constexpr uint64_t kFastIntervalMs = 40;
+
+    // Interval to wait after a repeat that fired repeatingMs after the first repeat.
+    static uint64_t intervalAt(uint64_t repeatingMs) {
+        if (repeatingMs < kSlowPhaseMs) return kSlowIntervalMs;
+        uint64_t into = repeatingMs - kSlowPhaseMs;
+        if (into >= kRampMs) return kFastIntervalMs;
+        return kSlowIntervalMs - (kSlowIntervalMs - kFastIntervalMs) * into / kRampMs;
+    }
+};
+
 // Routes UI navigation inputs to the focused MFD while suppressing
 // them from the game engine so flight controls (pips, thrusters) remain safe.
 class MfdInputRouter {
@@ -66,7 +83,11 @@ public:
     // to provider and returns true (indicating input was swallowed).
     bool processInput(bool isMfdFocused, IMfdProvider* activeProvider,
                       bool keyDownUp, bool keyDownDown, bool keyDownLeft, bool keyDownRight,
-                      bool keyDownSelect, bool keyDownBack, bool keyDownNextTab, bool keyDownPrevTab);
+                      bool keyDownSelect, bool keyDownBack, bool keyDownNextTab, bool keyDownPrevTab,
+                      uint64_t nowMs = kNowAuto);
+
+    // Pass as nowMs to use the monotonic GetTickCount64() clock. Tests inject their own.
+    static constexpr uint64_t kNowAuto = ~0ULL;
 
     void pollJoystickInputs(bool& up, bool& down, bool& left, bool& right,
                             bool& sel, bool& back, bool& next, bool& prev);
@@ -78,7 +99,8 @@ public:
     // Convenience poller using virtual keys, joystick/vJoy devices, and external key-state checker.
     // isKeyDownFn is a predicate (e.g. [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; })
     template <typename Fn>
-    bool pollAndRoute(bool isMfdFocused, IMfdProvider* activeProvider, Fn&& isKeyDownFn) {
+    bool pollAndRoute(bool isMfdFocused, IMfdProvider* activeProvider, Fn&& isKeyDownFn,
+                      uint64_t nowMs = kNowAuto) {
         bool jUp = false, jDown = false, jLeft = false, jRight = false;
         bool jSel = false, jBack = false, jNext = false, jPrev = false;
         pollJoystickInputs(jUp, jDown, jLeft, jRight, jSel, jBack, jNext, jPrev);
@@ -99,7 +121,7 @@ public:
         bool next = checkVks(m_bindings.nextTab) || jNext;
         bool prev = checkVks(m_bindings.prevTab) || jPrev;
 
-        return processInput(isMfdFocused, activeProvider, up, down, left, right, sel, back, next, prev);
+        return processInput(isMfdFocused, activeProvider, up, down, left, right, sel, back, next, prev, nowMs);
     }
 
     // Indicates whether the most recent input tick swallowed game controls.
@@ -123,6 +145,12 @@ private:
     bool m_prevPrevTab = false;
 
     bool m_lastSwallowed = false;
+
+    // Hold-to-repeat state: only the most recently pressed direction repeats.
+    MfdInputAction m_holdDir = MfdInputAction::kNone;
+    uint64_t m_nextRepeatMs = 0;
+    uint64_t m_firstRepeatMs = 0;
+    int m_repeatCount = 0;
 };
 
 } // namespace edvr::mfd

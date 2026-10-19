@@ -355,10 +355,10 @@ void MfdManager::setupScreenCallbacks(MfdScreen& screen) {
         if (scr) scr->isDirty = true;
     });
 
-    decl->setNavCallback([this, pkgId, scrId, qId](const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel) {
+    decl->setNavCallback([this, pkgId, scrId, qId](const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, int repeatCount) {
         if (tabId != "__settings" && !pkgId.empty()) {
             EventWriter::instance().enqueue(
-                MfdEventRecord::createNav(pkgId, scrId, tabId, itemIndex, itemId, itemLabel)
+                MfdEventRecord::createNav(pkgId, scrId, tabId, itemIndex, itemId, itemLabel, repeatCount)
             );
         }
         auto* scr = findScreen(qId);
@@ -382,7 +382,7 @@ void MfdManager::setupScreenCallbacks(MfdScreen& screen) {
         if (scr) scr->isDirty = true;
     });
 
-    decl->setAdjustCallback([this, pkgId, scrId, qId](const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& key, int delta) {
+    decl->setAdjustCallback([this, pkgId, scrId, qId](const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& key, int delta, int repeatCount) {
         (void)itemIndex; (void)itemId; (void)itemLabel;
         auto* scr = findScreen(qId);
         if (tabId == "__settings") {
@@ -390,7 +390,7 @@ void MfdManager::setupScreenCallbacks(MfdScreen& screen) {
         } else {
             if (!pkgId.empty()) {
                 EventWriter::instance().enqueue(
-                    MfdEventRecord::createAdjust(pkgId, scrId, tabId, itemIndex, itemId, itemLabel, key, delta)
+                    MfdEventRecord::createAdjust(pkgId, scrId, tabId, itemIndex, itemId, itemLabel, key, delta, repeatCount)
                 );
             }
         }

@@ -64,6 +64,11 @@ type Event struct {
 	Delta   *int      `json:"delta,omitempty"`
 	Action  string    `json:"action,omitempty"`
 
+	// Repeat and RepeatCount mark nav/adjust events produced by holding a direction.
+	// Absent (false/0) for discrete presses; RepeatCount is 1 for the first repeat.
+	Repeat      bool `json:"repeat,omitempty"`
+	RepeatCount int  `json:"repeatCount,omitempty"`
+
 	// Count is populated for events_dropped records.
 	Count int `json:"count,omitempty"`
 
