@@ -33,13 +33,34 @@ int parseEliteKey(const std::string& keyStr) {
     return 0;
 }
 
+uint32_t convertAxisNameToNumber(std::string axisName) {
+    uint32_t axis = 0;
+    if (axisName == "XAxis") {
+        axis = 1;
+    } else if (axisName == "YAxis") {
+        axis = 2;
+    } else if (axisName == "ZAxis") {
+        axis = 3;
+    } else if (axisName == "RZAxis") {
+        axis = 4;
+    } else if (axisName == "UAxis") {
+        axis = 5;
+    } else if (axisName == "VAxis") {
+        axis = 6;
+    } else {
+        Log::get().note("mfd_input: Unknown joystick axis found in binding file: %s\n", axisName.c_str());
+    }
+
+    return axis;
+}
+
 void parseDeviceKey(const std::string& device, const std::string& key, MfdActionBinding& binding) {
     if (key.empty()) return;
 
     if (device == "Keyboard") {
         int vk = parseEliteKey(key);
         if (vk > 0) binding.addVk(vk);
-    } else if (device.find("Joy") != std::string::npos || device == "vJoy" || device == "GamePad") {
+    } else if (device != "Mouse") {
         // Check for POV / Hat directions: e.g. "Joy_POV1Up", "Joy_POV1Down", "POV1Up", "Hat1Up", etc.
         bool hasPovOrHat = (key.find("POV") != std::string::npos || key.find("Hat") != std::string::npos);
         if (hasPovOrHat && (key.find("Up") != std::string::npos || key.find("UP") != std::string::npos)) {
@@ -50,6 +71,10 @@ void parseDeviceKey(const std::string& device, const std::string& key, MfdAction
             binding.povLeft = true;
         } else if (hasPovOrHat && (key.find("Right") != std::string::npos || key.find("RIGHT") != std::string::npos)) {
             binding.povRight = true;
+        } else if (key.rfind("Pos_Joy_") == 0 || key.rfind("Neg_Joy_") == 0) {
+            std::string axisName = key.substr(8);
+            binding.axis = convertAxisNameToNumber(axisName);
+            binding.axisNegative = key.rfind("Neg_Joy_") == 0;
         } else if (key.rfind("Joy_", 0) == 0) {
             // e.g. "Joy_4", "Joy_25"
             try {
@@ -58,6 +83,60 @@ void parseDeviceKey(const std::string& device, const std::string& key, MfdAction
             } catch (...) {}
         }
     }
+}
+
+uint32_t getJoystickAxisValue(uint32_t axis, JOYINFOEX ji, bool &axisValueFound) {
+    uint32_t newAxisValue = 0;
+
+    if (axis == 1 && ji.dwFlags & JOY_RETURNX) {
+        newAxisValue = ji.dwXpos;
+        axisValueFound = true;
+    } else if (axis == 2 && ji.dwFlags & JOY_RETURNY) {
+        newAxisValue = ji.dwYpos;
+        axisValueFound = true;
+    } else if (axis == 3 && ji.dwFlags & JOY_RETURNZ) {
+        newAxisValue = ji.dwZpos;
+        axisValueFound = true;
+    } else if (axis == 4 && ji.dwFlags & JOY_RETURNR) {
+        newAxisValue = ji.dwRpos;
+        axisValueFound = true;
+    } else if (axis == 5 && ji.dwFlags & JOY_RETURNU) {
+        newAxisValue = ji.dwUpos;
+        axisValueFound = true;
+    } else if (axis == 6 && ji.dwFlags & JOY_RETURNV) {
+        newAxisValue = ji.dwVpos;
+        axisValueFound = true;
+    }
+
+    return newAxisValue;
+}
+
+bool joystickAxisPressed(MfdActionBinding& binding, JOYINFOEX ji, int joystickNumber) {
+    boolean axisPressed = false;
+    uint32_t newAxisValue = 0;
+    uint32_t axisCenter = 32767;
+    uint32_t axisSlopFactor = 200;
+
+    if (binding.axis != 0) {
+        bool axisValueFound = false;
+        newAxisValue = getJoystickAxisValue(binding.axis, ji, axisValueFound);
+
+        if (axisValueFound) {
+            if (!binding.axisNegative) {
+                if (newAxisValue > axisCenter + axisSlopFactor && binding.axisLastValue[joystickNumber] <= axisCenter + axisSlopFactor) {
+                    axisPressed = true;
+                }
+            } else {
+                if (newAxisValue < axisCenter - axisSlopFactor && binding.axisLastValue[joystickNumber] >= axisCenter - axisSlopFactor) {
+                    axisPressed = true;
+                }
+            }
+
+            binding.axisLastValue[joystickNumber] = newAxisValue;
+        }
+    }
+
+    return axisPressed;
 }
 
 namespace {
@@ -194,12 +273,14 @@ void MfdInputRouter::reloadBindingsFromGame() {
         if (parseBindsXml(filepath, m_bindings)) {
             m_bindings.loadedFromBinds = true;
             m_bindings.presetName = preset;
-            Log::get().note("mfd_input: loaded Elite bindings from '%s' (preset: %s, up=0x%X/pov=%d, dn=0x%X/pov=%d, sel=0x%X, back=0x%X, next=0x%X, prev=0x%X)\n",
+            Log::get().note("mfd_input: loaded Elite bindings from '%s' (preset: %s, up=0x%X/pov=%d, dn=0x%X/pov=%d, sel=0x%X, sel axis: %d, sel axis negative: %d, back=0x%X, back axis: %d, back axis negative: %d, next=0x%X, next axis: %d, next axis negative: %d, prev=0x%X, prev axis: %d, prev axis negative: %d)\n",
                             filepath.c_str(), preset.c_str(),
                             m_bindings.up.joyButtonMask, m_bindings.up.povUp ? 1 : 0,
                             m_bindings.down.joyButtonMask, m_bindings.down.povDown ? 1 : 0,
-                            m_bindings.select.joyButtonMask, m_bindings.back.joyButtonMask,
-                            m_bindings.nextTab.joyButtonMask, m_bindings.prevTab.joyButtonMask);
+                            m_bindings.select.joyButtonMask, m_bindings.select.axis, m_bindings.select.axisNegative,
+                            m_bindings.back.joyButtonMask, m_bindings.back.axis, m_bindings.back.axisNegative,
+                            m_bindings.nextTab.joyButtonMask, m_bindings.nextTab.axis, m_bindings.nextTab.axisNegative,
+                            m_bindings.prevTab.joyButtonMask, m_bindings.prevTab.axis, m_bindings.prevTab.axisNegative);
             break;
         }
     }
@@ -234,6 +315,13 @@ void MfdInputRouter::pollJoystickInputs(bool& up, bool& down, bool& left, bool& 
             if (ji.dwButtons & m_bindings.back.joyButtonMask) back = true;
             if (ji.dwButtons & m_bindings.nextTab.joyButtonMask) next = true;
             if (ji.dwButtons & m_bindings.prevTab.joyButtonMask) prev = true;
+
+            // Check joystick axis inputs bound as buttons
+            if (joystickAxisPressed(m_bindings.select, ji, i)) sel = true;
+            if (joystickAxisPressed(m_bindings.back, ji, i)) back = true;
+            if (joystickAxisPressed(m_bindings.nextTab, ji, i)) next = true;
+            if (joystickAxisPressed(m_bindings.prevTab, ji, i)) prev = true;
+
         } else {
             m_devHasPov[i] = -1; // Unplugged: re-read caps if a device appears at this id again
         }
