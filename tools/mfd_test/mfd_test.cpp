@@ -363,6 +363,38 @@ int test_plugin_input_filter_suppression() {
     return 0;
 }
 
+// 5d. Test parsing of joystick bindings with manufacturer specific devices and axis bindings
+int test_joystick_button_and_axis_binds_parsing() {
+    MfdBindingsConfig config;
+    MfdActionBinding prevTabBinding;
+    MfdActionBinding nextTabBinding;
+    MfdActionBinding backBinding;
+
+    // Test parseDeviceKey with manufacturer specific joystick device name"
+    parseDeviceKey("T16000M", "Joy_1", backBinding);
+    TEST_CHECK(backBinding.joyButtonMask == 1, "Button with manufacturer specific device parsed");
+
+    // Test parseDeviceKey with joystick next and previous bindings from the T16000M default bindings
+    parseDeviceKey("T16000MTHROTTLE", "Neg_Joy_RZAxis", prevTabBinding);
+    TEST_CHECK(prevTabBinding.axis == 4, "Joystick negative rotational axis parsed");
+    TEST_CHECK(prevTabBinding.axisNegative, "Joystick negative rotational axis direction parsed");
+
+    parseDeviceKey("T16000MTHROTTLE", "Pos_Joy_RZAxis", nextTabBinding);
+    TEST_CHECK(nextTabBinding.axis == 4, "Joystick positive rotational axis parsed");
+    TEST_CHECK(!nextTabBinding.axisNegative, "Joystick positive rotational axis direction parsed");
+
+    // Test parseDeviceKey with joystick next and previous bindings from the ThrustMasterHOTAS4 default bindings
+    parseDeviceKey("ThrustMasterHOTAS4", "Neg_Joy_UAxis", prevTabBinding);
+    TEST_CHECK(prevTabBinding.axis == 5, "Joystick negative axis parsed");
+    TEST_CHECK(prevTabBinding.axisNegative, "Joystick negative axis direction parsed");
+
+    parseDeviceKey("ThrustMasterHOTAS4", "Pos_Joy_UAxis", nextTabBinding);
+    TEST_CHECK(nextTabBinding.axis == 5, "Joystick positive axis parsed");
+    TEST_CHECK(!nextTabBinding.axisNegative, "Joystick positive axis direction parsed");
+
+    return 0;
+}
+
 // 6. Test HUD Renderer and Pixel Rasterization
 int test_renderer() {
     MfdRenderer renderer(256, 192);

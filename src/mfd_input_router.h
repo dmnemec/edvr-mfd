@@ -14,6 +14,9 @@ int parseEliteKey(const std::string& keyStr);
 struct MfdActionBinding {
     std::vector<int> vkeys;
     uint32_t joyButtonMask = 0;   // Bit 0 = Joy_1, Bit 31 = Joy_32
+    uint32_t axis = 0;
+    bool axisNegative = false;
+    uint32_t axisLastValue[50] = {32767};
     bool povUp = false;
     bool povDown = false;
     bool povLeft = false;
