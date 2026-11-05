@@ -13,12 +13,14 @@
       "id": "integrity",
       "title": "INTEGRITY",
       "type": "list",
+      "defaultSelectedItem": 0,
       "items": [
         {
           "id": "placeholder",
           "label": "No module telemetry",
           "value": "—",
-          "valueColor": "dim"
+          "valueColor": "dim",
+          "dropFocus": true
         }
       ]
     },
@@ -57,12 +59,14 @@
       "id": "cargo",
       "title": "CARGO",
       "type": "list",
+      "defaultSelectedItem": 0,
       "items": [
         {
           "id": "placeholder",
           "label": "No cargo detected",
           "value": "—",
-          "valueColor": "dim"
+          "valueColor": "dim",
+          "dropFocus": true
         }
       ]
     }
