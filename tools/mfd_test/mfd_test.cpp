@@ -3743,6 +3743,9 @@ int main() {
     if (test_back_action_parse() != 0) return 1;
     std::cout << "  ok  Back Event & backAction Parsing (#18)" << std::endl;
 
+    if (test_joystick_button_and_axis_binds_parsing() != 0) return 1;
+    std::cout << "  ok  Joystick Button and Axis Binds Parsing (#20)" << std::endl;
+
     std::cout << "[mfd_test] ALL TESTS PASSED." << std::endl;
     ExitProcess(0);
 }

@@ -112,22 +112,22 @@ uint32_t getJoystickAxisValue(uint32_t axis, JOYINFOEX ji, bool &axisValueFound)
 }
 
 bool joystickAxisPressed(MfdActionBinding& binding, JOYINFOEX ji, int joystickNumber) {
-    boolean axisPressed = false;
+    bool axisPressed = false;
     uint32_t newAxisValue = 0;
-    uint32_t axisCenter = 32767;
-    uint32_t axisSlopFactor = 200;
 
-    if (binding.axis != 0) {
+    if (binding.axis != 0 && joystickNumber >= 0 && joystickNumber < static_cast<int>(MfdActionBinding::kMaxJoyDevices)) {
         bool axisValueFound = false;
         newAxisValue = getJoystickAxisValue(binding.axis, ji, axisValueFound);
 
         if (axisValueFound) {
             if (!binding.axisNegative) {
-                if (newAxisValue > axisCenter + axisSlopFactor && binding.axisLastValue[joystickNumber] <= axisCenter + axisSlopFactor) {
+                if (newAxisValue > MfdActionBinding::kAxisCenter + MfdActionBinding::kAxisThreshold &&
+                    binding.axisLastValue[joystickNumber] <= MfdActionBinding::kAxisCenter + MfdActionBinding::kAxisThreshold) {
                     axisPressed = true;
                 }
             } else {
-                if (newAxisValue < axisCenter - axisSlopFactor && binding.axisLastValue[joystickNumber] >= axisCenter - axisSlopFactor) {
+                if (newAxisValue < MfdActionBinding::kAxisCenter - MfdActionBinding::kAxisThreshold &&
+                    binding.axisLastValue[joystickNumber] >= MfdActionBinding::kAxisCenter - MfdActionBinding::kAxisThreshold) {
                     axisPressed = true;
                 }
             }
@@ -317,6 +317,10 @@ void MfdInputRouter::pollJoystickInputs(bool& up, bool& down, bool& left, bool& 
             if (ji.dwButtons & m_bindings.prevTab.joyButtonMask) prev = true;
 
             // Check joystick axis inputs bound as buttons
+            if (joystickAxisPressed(m_bindings.up, ji, i)) up = true;
+            if (joystickAxisPressed(m_bindings.down, ji, i)) down = true;
+            if (joystickAxisPressed(m_bindings.left, ji, i)) left = true;
+            if (joystickAxisPressed(m_bindings.right, ji, i)) right = true;
             if (joystickAxisPressed(m_bindings.select, ji, i)) sel = true;
             if (joystickAxisPressed(m_bindings.back, ji, i)) back = true;
             if (joystickAxisPressed(m_bindings.nextTab, ji, i)) next = true;

@@ -12,15 +12,25 @@ int parseEliteKey(const std::string& keyStr);
 
 // Single UI action binding mapping multiple keyboard virtual keys, joystick buttons, and POV hats.
 struct MfdActionBinding {
+    static constexpr unsigned kMaxJoyDevices = 16;
+    static constexpr uint32_t kAxisCenter = 32767;
+    static constexpr uint32_t kAxisThreshold = 12000;
+
     std::vector<int> vkeys;
     uint32_t joyButtonMask = 0;   // Bit 0 = Joy_1, Bit 31 = Joy_32
     uint32_t axis = 0;
     bool axisNegative = false;
-    uint32_t axisLastValue[50] = {32767};
+    uint32_t axisLastValue[kMaxJoyDevices];
     bool povUp = false;
     bool povDown = false;
     bool povLeft = false;
     bool povRight = false;
+
+    MfdActionBinding() {
+        for (unsigned i = 0; i < kMaxJoyDevices; ++i) {
+            axisLastValue[i] = kAxisCenter;
+        }
+    }
 
     void addVk(int vk) {
         if (vk > 0) vkeys.push_back(vk);
