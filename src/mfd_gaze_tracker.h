@@ -44,6 +44,7 @@ public:
     void dropFocus() {
         m_state = MfdFocusState::kUnfocused;
         m_timer = 0.0f;
+        m_suppressUntilGazeExit = true;
     }
 
     MfdFocusState currentState() const { return m_state; }
@@ -72,6 +73,7 @@ private:
     float m_anchorOffsetY = 0.0f;     // E.g. -0.3 anchors gaze toward lower third of screen
     float m_timer = 0.0f;
     float m_lastGazeAngleDeg = 180.0f;
+    bool m_suppressUntilGazeExit = false;
 };
 
 } // namespace edvr::mfd

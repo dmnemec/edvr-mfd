@@ -3752,6 +3752,19 @@ int test_drop_focus_and_submenu_selection() {
         TEST_CHECK(tracker.isFocused(), "Gaze tracker reached focused state");
         tracker.dropFocus();
         TEST_CHECK(!tracker.isFocused(), "Gaze tracker dropped focus immediately");
+
+        // Continuing to look directly at the panel keeps it unfocused (#21)
+        for (int i = 0; i < 20; ++i) {
+            tracker.update(Vec3(0, 0, 0), Vec3(0, 0, -1.0f), pose, 0.05f);
+        }
+        TEST_CHECK(!tracker.isFocused(), "Gaze tracker remains unfocused while looking at panel after dropFocus");
+
+        // Looking away clears the suppression lockout
+        tracker.update(Vec3(0, 0, 0), Vec3(0, 0, 1.0f), pose, 0.05f); // glance away
+        for (int i = 0; i < 10; ++i) {
+            tracker.update(Vec3(0, 0, 0), Vec3(0, 0, -1.0f), pose, 0.05f);
+        }
+        TEST_CHECK(tracker.isFocused(), "Gaze re-acquired after looking away and returning");
     }
 
     return 0;

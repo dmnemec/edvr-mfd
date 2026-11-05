@@ -369,132 +369,146 @@ void MfdContentWatcher::restoreCursor(const MfdViewModel& previousVm, MfdViewMod
         return;
     }
 
-    const auto& prevTab = previousVm.tabs[prevActiveTabIdx];
-    std::string targetTabId = prevTab.id;
+    const auto& prevActiveTab = previousVm.tabs[prevActiveTabIdx];
+    std::string targetActiveTabId = prevActiveTab.id;
 
-    // 1. Locate tab in new model by tab.id (§5.2)
+    // 1. Locate active tab in new model by tab.id (§5.2)
     int targetTabIdx = -1;
     for (size_t i = 0; i < newVm.tabs.size(); ++i) {
-        if (newVm.tabs[i].id == targetTabId) {
+        if (newVm.tabs[i].id == targetActiveTabId) {
             targetTabIdx = static_cast<int>(i);
             break;
         }
     }
 
     if (targetTabIdx < 0) {
-        // Tab is gone: select tab 0 (§5.2)
+        // Active tab is gone: select tab 0 (§5.2)
         newVm.activeTabIndex = 0;
-        return;
+    } else {
+        newVm.activeTabIndex = targetTabIdx;
     }
 
-    newVm.activeTabIndex = targetTabIdx;
-    auto& newTab = newVm.tabs[targetTabIdx];
-
-    // 2. Restore item cursor within tab (§5.2)
-    if (newTab.type == MfdTabType::kList) {
-        if (newTab.items.empty()) {
-            newTab.selectedIndex = 0;
-            newTab.scrollOffset = 0;
-        } else {
-            std::string targetItemId;
-            if (prevTab.selectedIndex >= 0 && prevTab.selectedIndex < static_cast<int>(prevTab.items.size())) {
-                targetItemId = prevTab.items[prevTab.selectedIndex].id;
+    // 2. Restore item cursors across all matching tabs so tab cycling preserves positions (#22)
+    for (size_t i = 0; i < newVm.tabs.size(); ++i) {
+        auto& newTab = newVm.tabs[i];
+        const MfdTab* matchingPrevTab = nullptr;
+        for (const auto& pt : previousVm.tabs) {
+            if (pt.id == newTab.id) {
+                matchingPrevTab = &pt;
+                break;
             }
+        }
 
-            int foundItemIdx = -1;
-            if (!targetItemId.empty()) {
-                for (size_t j = 0; j < newTab.items.size(); ++j) {
-                    if (newTab.items[j].id == targetItemId) {
-                        foundItemIdx = static_cast<int>(j);
-                        break;
+        if (newTab.type == MfdTabType::kList) {
+            if (newTab.items.empty()) {
+                newTab.selectedIndex = 0;
+                newTab.scrollOffset = 0;
+            } else {
+                std::string targetItemId;
+                if (matchingPrevTab && matchingPrevTab->selectedIndex >= 0 &&
+                    matchingPrevTab->selectedIndex < static_cast<int>(matchingPrevTab->items.size())) {
+                    targetItemId = matchingPrevTab->items[matchingPrevTab->selectedIndex].id;
+                }
+
+                int foundItemIdx = -1;
+                if (!targetItemId.empty()) {
+                    for (size_t j = 0; j < newTab.items.size(); ++j) {
+                        if (newTab.items[j].id == targetItemId) {
+                            foundItemIdx = static_cast<int>(j);
+                            break;
+                        }
                     }
                 }
-            }
 
-            if (newTab.defaultSelectedItem >= 0) {
-                newTab.selectedIndex = (std::clamp)(newTab.defaultSelectedItem, 0, static_cast<int>(newTab.items.size()) - 1);
-            } else if (foundItemIdx >= 0) {
-                newTab.selectedIndex = foundItemIdx;
+                if (newTab.defaultSelectedItem >= 0) {
+                    newTab.selectedIndex = (std::clamp)(newTab.defaultSelectedItem, 0, static_cast<int>(newTab.items.size()) - 1);
+                } else if (foundItemIdx >= 0) {
+                    newTab.selectedIndex = foundItemIdx;
+                } else if (matchingPrevTab) {
+                    newTab.selectedIndex = (std::clamp)(matchingPrevTab->selectedIndex, 0, static_cast<int>(newTab.items.size()) - 1);
+                }
+
+                int visibleRows = newTab.visibleRows(newVm.renderHeight);
+                int maxScroll = (std::max)(0, static_cast<int>(newTab.items.size()) - visibleRows);
+                int prevScroll = matchingPrevTab ? matchingPrevTab->scrollOffset : 0;
+                newTab.scrollOffset = (std::clamp)(prevScroll, 0, maxScroll);
+                newTab.keepSelectionVisible(visibleRows);
+            }
+        } else if (newTab.type == MfdTabType::kKeyValue) {
+            if (newTab.keyValues.empty()) {
+                newTab.selectedIndex = 0;
+                newTab.scrollOffset = 0;
             } else {
-                // Item is gone, clamp index (§5.2)
-                newTab.selectedIndex = (std::clamp)(prevTab.selectedIndex, 0, static_cast<int>(newTab.items.size()) - 1);
-            }
+                std::string targetItemId;
+                if (matchingPrevTab && matchingPrevTab->selectedIndex >= 0 &&
+                    matchingPrevTab->selectedIndex < static_cast<int>(matchingPrevTab->keyValues.size())) {
+                    targetItemId = matchingPrevTab->keyValues[matchingPrevTab->selectedIndex].id;
+                }
 
-            // Keep selection visible
-            int visibleRows = newTab.visibleRows(newVm.renderHeight);
-            int maxScroll = (std::max)(0, static_cast<int>(newTab.items.size()) - visibleRows);
-            newTab.scrollOffset = (std::clamp)(prevTab.scrollOffset, 0, maxScroll);
-            newTab.keepSelectionVisible(visibleRows);
-        }
-    } else if (newTab.type == MfdTabType::kKeyValue) {
-        if (newTab.keyValues.empty()) {
-            newTab.selectedIndex = 0;
-            newTab.scrollOffset = 0;
-        } else {
-            std::string targetItemId;
-            if (prevTab.selectedIndex >= 0 && prevTab.selectedIndex < static_cast<int>(prevTab.keyValues.size())) {
-                targetItemId = prevTab.keyValues[prevTab.selectedIndex].id;
-            }
-
-            int foundItemIdx = -1;
-            if (!targetItemId.empty()) {
-                for (size_t j = 0; j < newTab.keyValues.size(); ++j) {
-                    if (newTab.keyValues[j].id == targetItemId) {
-                        foundItemIdx = static_cast<int>(j);
-                        break;
+                int foundItemIdx = -1;
+                if (!targetItemId.empty()) {
+                    for (size_t j = 0; j < newTab.keyValues.size(); ++j) {
+                        if (newTab.keyValues[j].id == targetItemId) {
+                            foundItemIdx = static_cast<int>(j);
+                            break;
+                        }
                     }
                 }
-            }
 
-            if (newTab.defaultSelectedItem >= 0) {
-                newTab.selectedIndex = (std::clamp)(newTab.defaultSelectedItem, 0, static_cast<int>(newTab.keyValues.size()) - 1);
-            } else if (foundItemIdx >= 0) {
-                newTab.selectedIndex = foundItemIdx;
+                if (newTab.defaultSelectedItem >= 0) {
+                    newTab.selectedIndex = (std::clamp)(newTab.defaultSelectedItem, 0, static_cast<int>(newTab.keyValues.size()) - 1);
+                } else if (foundItemIdx >= 0) {
+                    newTab.selectedIndex = foundItemIdx;
+                } else if (matchingPrevTab) {
+                    newTab.selectedIndex = (std::clamp)(matchingPrevTab->selectedIndex, 0, static_cast<int>(newTab.keyValues.size()) - 1);
+                }
+
+                int visibleRows = newTab.visibleRows(newVm.renderHeight);
+                int maxScroll = (std::max)(0, static_cast<int>(newTab.keyValues.size()) - visibleRows);
+                int prevScroll = matchingPrevTab ? matchingPrevTab->scrollOffset : 0;
+                newTab.scrollOffset = (std::clamp)(prevScroll, 0, maxScroll);
+                newTab.keepSelectionVisible(visibleRows);
+            }
+        } else if (newTab.type == MfdTabType::kBars) {
+            if (newTab.barItems.empty()) {
+                newTab.selectedIndex = 0;
+                newTab.scrollOffset = 0;
             } else {
-                newTab.selectedIndex = (std::clamp)(prevTab.selectedIndex, 0, static_cast<int>(newTab.keyValues.size()) - 1);
-            }
+                std::string targetItemId;
+                if (matchingPrevTab && matchingPrevTab->selectedIndex >= 0 &&
+                    matchingPrevTab->selectedIndex < static_cast<int>(matchingPrevTab->barItems.size())) {
+                    targetItemId = matchingPrevTab->barItems[matchingPrevTab->selectedIndex].id;
+                }
 
-            int visibleRows = newTab.visibleRows(newVm.renderHeight);
-            int maxScroll = (std::max)(0, static_cast<int>(newTab.keyValues.size()) - visibleRows);
-            newTab.scrollOffset = (std::clamp)(prevTab.scrollOffset, 0, maxScroll);
-            newTab.keepSelectionVisible(visibleRows);
-        }
-    } else if (newTab.type == MfdTabType::kBars) {
-        if (newTab.barItems.empty()) {
-            newTab.selectedIndex = 0;
-            newTab.scrollOffset = 0;
-        } else {
-            std::string targetItemId;
-            if (prevTab.selectedIndex >= 0 && prevTab.selectedIndex < static_cast<int>(prevTab.barItems.size())) {
-                targetItemId = prevTab.barItems[prevTab.selectedIndex].id;
-            }
-
-            int foundItemIdx = -1;
-            if (!targetItemId.empty()) {
-                for (size_t j = 0; j < newTab.barItems.size(); ++j) {
-                    if (newTab.barItems[j].id == targetItemId) {
-                        foundItemIdx = static_cast<int>(j);
-                        break;
+                int foundItemIdx = -1;
+                if (!targetItemId.empty()) {
+                    for (size_t j = 0; j < newTab.barItems.size(); ++j) {
+                        if (newTab.barItems[j].id == targetItemId) {
+                            foundItemIdx = static_cast<int>(j);
+                            break;
+                        }
                     }
                 }
-            }
 
-            if (newTab.defaultSelectedItem >= 0) {
-                newTab.selectedIndex = (std::clamp)(newTab.defaultSelectedItem, 0, static_cast<int>(newTab.barItems.size()) - 1);
-            } else if (foundItemIdx >= 0) {
-                newTab.selectedIndex = foundItemIdx;
-            } else {
-                newTab.selectedIndex = (std::clamp)(prevTab.selectedIndex, 0, static_cast<int>(newTab.barItems.size()) - 1);
-            }
+                if (newTab.defaultSelectedItem >= 0) {
+                    newTab.selectedIndex = (std::clamp)(newTab.defaultSelectedItem, 0, static_cast<int>(newTab.barItems.size()) - 1);
+                } else if (foundItemIdx >= 0) {
+                    newTab.selectedIndex = foundItemIdx;
+                } else if (matchingPrevTab) {
+                    newTab.selectedIndex = (std::clamp)(matchingPrevTab->selectedIndex, 0, static_cast<int>(newTab.barItems.size()) - 1);
+                }
 
-            int visibleRows = newTab.visibleRows(newVm.renderHeight);
-            int maxScroll = (std::max)(0, static_cast<int>(newTab.barItems.size()) - visibleRows);
-            newTab.scrollOffset = (std::clamp)(prevTab.scrollOffset, 0, maxScroll);
-            newTab.keepSelectionVisible(visibleRows);
+                int visibleRows = newTab.visibleRows(newVm.renderHeight);
+                int maxScroll = (std::max)(0, static_cast<int>(newTab.barItems.size()) - visibleRows);
+                int prevScroll = matchingPrevTab ? matchingPrevTab->scrollOffset : 0;
+                newTab.scrollOffset = (std::clamp)(prevScroll, 0, maxScroll);
+                newTab.keepSelectionVisible(visibleRows);
+            }
+        } else if (newTab.type == MfdTabType::kText) {
+            int maxScroll = (std::max)(0, static_cast<int>(newTab.lines.size()) - 1);
+            int prevScroll = matchingPrevTab ? matchingPrevTab->textScrollLine : 0;
+            newTab.textScrollLine = (std::clamp)(prevScroll, 0, maxScroll);
         }
-    } else if (newTab.type == MfdTabType::kText) {
-        int maxScroll = (std::max)(0, static_cast<int>(newTab.lines.size()) - 1);
-        newTab.textScrollLine = (std::clamp)(prevTab.textScrollLine, 0, maxScroll);
     }
 }
 

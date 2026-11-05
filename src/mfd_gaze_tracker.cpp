@@ -68,6 +68,18 @@ MfdFocusState MfdGazeTracker::update(const Vec3& headPos, const Vec3& headForwar
     bool onTarget = testRayIntersection(headPos, headForward, mfdPose, nullptr,
                                         m_anchorOffsetX, m_anchorOffsetY, m_hitMargin);
 
+    if (m_suppressUntilGazeExit) {
+        if (!onTarget) {
+            // Pilot looked away: clear suppression lockout
+            m_suppressUntilGazeExit = false;
+        } else {
+            // Keep unfocused while pilot continues looking directly at panel after dropFocus (#21)
+            m_state = MfdFocusState::kUnfocused;
+            m_timer = 0.0f;
+            return m_state;
+        }
+    }
+
     switch (m_state) {
         case MfdFocusState::kUnfocused:
             if (onTarget) {
