@@ -57,7 +57,7 @@ public:
     using KeyValueActionCallback = std::function<void(const std::string& tabTitle, int index, const std::string& key, int adjustDelta)>;
     using TabChangeCallback = std::function<void(const std::string& tabId, int tabIndex)>;
     using NavCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, int repeatCount)>;
-    using SelectCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value)>;
+    using SelectCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value, bool dropFocus)>;
     // itemIndex is -1 and ids/labels empty when no item is focused (empty or text tab).
     using BackCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value)>;
     using AdjustCallback = std::function<void(const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& key, int delta, int repeatCount)>;
@@ -228,7 +228,7 @@ public:
                         const auto& item = tab->items[tab->selectedIndex];
                         std::string actionStr = (item.action == MfdItemAction::kClipboard) ? "clipboard" : "event";
                         if (m_selectCallback) {
-                            try { m_selectCallback(tabId, tab->selectedIndex, item.id, item.label, actionStr, item.value); } catch (...) {}
+                            try { m_selectCallback(tabId, tab->selectedIndex, item.id, item.label, actionStr, item.value, item.dropFocus); } catch (...) {}
                         }
                         if (m_actionCallback) {
                             try { m_actionCallback(item.id, item.label); } catch (...) {}
@@ -239,7 +239,7 @@ public:
                     if (tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->keyValues.size())) {
                         const auto& kv = tab->keyValues[tab->selectedIndex];
                         if (m_selectCallback) {
-                            try { m_selectCallback(tabId, tab->selectedIndex, kv.id, kv.key, "event", kv.value); } catch (...) {}
+                            try { m_selectCallback(tabId, tab->selectedIndex, kv.id, kv.key, "event", kv.value, kv.dropFocus); } catch (...) {}
                         }
                         if (m_kvActionCallback) {
                             try { m_kvActionCallback(tab->title, tab->selectedIndex, kv.key, 1); } catch (...) {}
@@ -250,7 +250,7 @@ public:
                     if (tab->selectedIndex >= 0 && tab->selectedIndex < static_cast<int>(tab->barItems.size())) {
                         const auto& bar = tab->barItems[tab->selectedIndex];
                         if (m_selectCallback) {
-                            try { m_selectCallback(tabId, tab->selectedIndex, bar.id, bar.label, "event", ""); } catch (...) {}
+                            try { m_selectCallback(tabId, tab->selectedIndex, bar.id, bar.label, "event", "", false); } catch (...) {}
                         }
                         return true;
                     }

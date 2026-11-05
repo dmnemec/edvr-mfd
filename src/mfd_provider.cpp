@@ -36,6 +36,11 @@ bool DeclarativeMfdProvider::loadFromJson(const std::string& json) {
                 MfdTab tab;
                 tab.id = tabVal.value("id", "tab_" + std::to_string(tIdx++));
                 tab.title = tabVal.value("title", "TAB");
+                if (tabVal.contains("defaultSelectedItem") && tabVal["defaultSelectedItem"].is_number_integer()) {
+                    tab.defaultSelectedItem = tabVal["defaultSelectedItem"].get<int>();
+                } else if (tabVal.contains("selectedIndex") && tabVal["selectedIndex"].is_number_integer()) {
+                    tab.defaultSelectedItem = tabVal["selectedIndex"].get<int>();
+                }
                 std::string typeStr = tabVal.value("type", "list");
                 if (typeStr == "keyvalue") {
                     tab.type = MfdTabType::kKeyValue;
@@ -57,12 +62,14 @@ bool DeclarativeMfdProvider::loadFromJson(const std::string& json) {
                             item.value = itemVal.value("value", "");
                             item.sublabel = itemVal.value("sublabel", "");
                             item.badge = itemVal.value("badge", "");
+                            item.dropFocus = itemVal.value("dropFocus", false);
                             tab.items.push_back(std::move(item));
                         } else if (tab.type == MfdTabType::kKeyValue && itemVal.is_object()) {
                             MfdKeyValue kv;
                             kv.key = itemVal.value("key", "");
                             kv.value = itemVal.value("value", "");
                             kv.id = itemVal.value("id", kv.key.empty() ? ("kv_" + std::to_string(iIdx++)) : kv.key);
+                            kv.dropFocus = itemVal.value("dropFocus", false);
                             tab.keyValues.push_back(std::move(kv));
                         } else if (tab.type == MfdTabType::kText && itemVal.is_string()) {
                             tab.lines.push_back(itemVal.get<std::string>());

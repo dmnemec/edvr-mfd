@@ -411,7 +411,9 @@ void MfdContentWatcher::restoreCursor(const MfdViewModel& previousVm, MfdViewMod
                 }
             }
 
-            if (foundItemIdx >= 0) {
+            if (newTab.defaultSelectedItem >= 0) {
+                newTab.selectedIndex = (std::clamp)(newTab.defaultSelectedItem, 0, static_cast<int>(newTab.items.size()) - 1);
+            } else if (foundItemIdx >= 0) {
                 newTab.selectedIndex = foundItemIdx;
             } else {
                 // Item is gone, clamp index (§5.2)
@@ -444,7 +446,9 @@ void MfdContentWatcher::restoreCursor(const MfdViewModel& previousVm, MfdViewMod
                 }
             }
 
-            if (foundItemIdx >= 0) {
+            if (newTab.defaultSelectedItem >= 0) {
+                newTab.selectedIndex = (std::clamp)(newTab.defaultSelectedItem, 0, static_cast<int>(newTab.keyValues.size()) - 1);
+            } else if (foundItemIdx >= 0) {
                 newTab.selectedIndex = foundItemIdx;
             } else {
                 newTab.selectedIndex = (std::clamp)(prevTab.selectedIndex, 0, static_cast<int>(newTab.keyValues.size()) - 1);
@@ -475,7 +479,9 @@ void MfdContentWatcher::restoreCursor(const MfdViewModel& previousVm, MfdViewMod
                 }
             }
 
-            if (foundItemIdx >= 0) {
+            if (newTab.defaultSelectedItem >= 0) {
+                newTab.selectedIndex = (std::clamp)(newTab.defaultSelectedItem, 0, static_cast<int>(newTab.barItems.size()) - 1);
+            } else if (foundItemIdx >= 0) {
                 newTab.selectedIndex = foundItemIdx;
             } else {
                 newTab.selectedIndex = (std::clamp)(prevTab.selectedIndex, 0, static_cast<int>(newTab.barItems.size()) - 1);

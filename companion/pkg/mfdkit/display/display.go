@@ -112,6 +112,7 @@ type Item struct {
 	Checks     []Check `json:"checks,omitempty"`
 	Action     string  `json:"action,omitempty"`
 	BackAction string  `json:"backAction,omitempty"` // Run on Back press; "event" (default) or "clipboard"
+	DropFocus  bool    `json:"dropFocus,omitempty"`  // Defocus panel after select action (#21)
 }
 
 // KeyValue represents an entry in a key-value grid tab.
@@ -122,6 +123,7 @@ type KeyValue struct {
 	ValueColor string `json:"valueColor,omitempty"`
 	Action     string `json:"action,omitempty"`
 	BackAction string `json:"backAction,omitempty"` // Run on Back press; "event" (default) or "clipboard"
+	DropFocus  bool   `json:"dropFocus,omitempty"`  // Defocus panel after select action (#21)
 }
 
 // Bar represents a progress/gauge bar in a bars tab.
@@ -136,32 +138,35 @@ type Bar struct {
 
 // Tab represents an individual display tab.
 type Tab struct {
-	ID        string     `json:"id"`
-	Title     string     `json:"title"`
-	Type      string     `json:"type"` // "list", "keyvalue", "text", "bars"
-	Items     []Item     `json:"items,omitempty"`
-	KeyValues []KeyValue `json:"keyvalues,omitempty"`
-	Bars      []Bar      `json:"bars,omitempty"`
-	Text      string     `json:"text,omitempty"`
+	ID                  string     `json:"id"`
+	Title               string     `json:"title"`
+	Type                string     `json:"type"` // "list", "keyvalue", "text", "bars"
+	DefaultSelectedItem *int       `json:"defaultSelectedItem,omitempty"` // Reset or restore selection index (#22)
+	Items               []Item     `json:"items,omitempty"`
+	KeyValues           []KeyValue `json:"keyvalues,omitempty"`
+	Bars                []Bar      `json:"bars,omitempty"`
+	Text                string     `json:"text,omitempty"`
 }
 
 // MarshalJSON serializes Tab, mapping KeyValues and Bars into "items" when appropriate (§5.3).
 func (t Tab) MarshalJSON() ([]byte, error) {
 	type TabAlias struct {
-		ID        string     `json:"id"`
-		Title     string     `json:"title"`
-		Type      string     `json:"type"`
-		Items     any        `json:"items,omitempty"`
-		KeyValues []KeyValue `json:"keyvalues,omitempty"`
-		Bars      []Bar      `json:"bars,omitempty"`
-		Text      string     `json:"text,omitempty"`
+		ID                  string     `json:"id"`
+		Title               string     `json:"title"`
+		Type                string     `json:"type"`
+		DefaultSelectedItem *int       `json:"defaultSelectedItem,omitempty"`
+		Items               any        `json:"items,omitempty"`
+		KeyValues           []KeyValue `json:"keyvalues,omitempty"`
+		Bars                []Bar      `json:"bars,omitempty"`
+		Text                string     `json:"text,omitempty"`
 	}
 
 	alias := TabAlias{
-		ID:    t.ID,
-		Title: t.Title,
-		Type:  t.Type,
-		Text:  t.Text,
+		ID:                  t.ID,
+		Title:               t.Title,
+		Type:                t.Type,
+		DefaultSelectedItem: t.DefaultSelectedItem,
+		Text:                t.Text,
 	}
 
 	switch t.Type {

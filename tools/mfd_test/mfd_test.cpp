@@ -3659,6 +3659,104 @@ int test_hold_to_repeat() {
     return 0;
 }
 
+int test_drop_focus_and_submenu_selection() {
+    // 1. Schema parsing: dropFocus on items and defaultSelectedItem / selectedIndex on tabs
+    const char* schemaJson = R"({
+        "schemaVersion": 1, "title": "TEST",
+        "tabs": [
+            {
+                "id": "tab_list", "title": "LIST", "type": "list", "defaultSelectedItem": 2,
+                "items": [
+                    { "id": "l0", "label": "L0" },
+                    { "id": "l1", "label": "L1", "dropFocus": true },
+                    { "id": "l2", "label": "L2", "dropFocus": false }
+                ]
+            },
+            {
+                "id": "tab_kv", "title": "KV", "type": "keyvalue", "selectedIndex": 1,
+                "items": [
+                    { "id": "k0", "key": "K0", "value": "V0", "dropFocus": true },
+                    { "id": "k1", "key": "K1", "value": "V1" }
+                ]
+            }
+        ]
+    })";
+
+    MfdViewModel parsedVm;
+    MfdParseError err;
+    TEST_CHECK(parseDisplayJson(std::string(schemaJson), parsedVm, &err), "Schema parses dropFocus and defaultSelectedItem");
+    if (parsedVm.tabs.size() == 2) {
+        TEST_CHECK(parsedVm.tabs[0].defaultSelectedItem == 2, "List tab defaultSelectedItem parsed");
+        TEST_CHECK(!parsedVm.tabs[0].items[0].dropFocus, "Item l0 dropFocus defaults to false");
+        TEST_CHECK(parsedVm.tabs[0].items[1].dropFocus, "Item l1 dropFocus parsed true");
+        TEST_CHECK(!parsedVm.tabs[0].items[2].dropFocus, "Item l2 dropFocus parsed false");
+
+        TEST_CHECK(parsedVm.tabs[1].defaultSelectedItem == 1, "KV tab selectedIndex parsed as defaultSelectedItem");
+        TEST_CHECK(parsedVm.tabs[1].keyValues[0].dropFocus, "KV k0 dropFocus parsed true");
+        TEST_CHECK(!parsedVm.tabs[1].keyValues[1].dropFocus, "KV k1 dropFocus defaults to false");
+    }
+
+    // 2. Cursor restoration with defaultSelectedItem override (#22)
+    {
+        MfdViewModel prevVm;
+        MfdTab t1;
+        t1.id = "tab_list";
+        t1.type = MfdTabType::kList;
+        t1.selectedIndex = 0; // Previously on item 0
+        t1.items.push_back(MfdListItem("l0", "L0"));
+        t1.items.push_back(MfdListItem("l1", "L1"));
+        t1.items.push_back(MfdListItem("l2", "L2"));
+        prevVm.tabs.push_back(t1);
+
+        MfdViewModel nextVm = parsedVm;
+        MfdContentWatcher::restoreCursor(prevVm, nextVm);
+        TEST_CHECK(nextVm.tabs[0].selectedIndex == 2, "restoreCursor overrides cursor with defaultSelectedItem (2)");
+    }
+
+    // 3. DeclarativeMfdProvider select callback passes dropFocus flag (#21)
+    {
+        DeclarativeMfdProvider prov("test_provider");
+        TEST_CHECK(prov.loadFromJson(schemaJson), "loadFromJson succeeds");
+        prov.onFocusChanged(true);
+
+        bool receivedDropFocus = false;
+        std::string receivedItem;
+        prov.setSelectCallback([&](const std::string&, int, const std::string& itemId, const std::string&, const std::string&, const std::string&, bool dropFocus) {
+            receivedItem = itemId;
+            receivedDropFocus = dropFocus;
+        });
+
+        // Current tab is tab_list, select item 0 (dropFocus = false)
+        prov.viewModel().tabs[0].selectedIndex = 0;
+        prov.onInput(MfdInputAction::kSelect);
+        TEST_CHECK(receivedItem == "l0" && !receivedDropFocus, "Item l0 select callback received dropFocus=false");
+
+        // Select item 1 (dropFocus = true)
+        prov.viewModel().tabs[0].selectedIndex = 1;
+        prov.onInput(MfdInputAction::kSelect);
+        TEST_CHECK(receivedItem == "l1" && receivedDropFocus, "Item l1 select callback received dropFocus=true");
+    }
+
+    // 4. MfdGazeTracker dropFocus()
+    {
+        MfdGazeTracker tracker;
+        tracker.setDwellEnterTime(0.10f);
+        MfdPose pose{};
+        pose.position = Vec3(0, 0, -1.0f);
+        pose.orientation = Quat(0.0f, 0.0f, 0.0f, 1.0f);
+        pose.widthM = 0.5f;
+        pose.heightM = 0.5f;
+        for (int i = 0; i < 10; ++i) {
+            tracker.update(Vec3(0, 0, 0), Vec3(0, 0, -1.0f), pose, 0.05f);
+        }
+        TEST_CHECK(tracker.isFocused(), "Gaze tracker reached focused state");
+        tracker.dropFocus();
+        TEST_CHECK(!tracker.isFocused(), "Gaze tracker dropped focus immediately");
+    }
+
+    return 0;
+}
+
 int main() {
     std::cout << "[mfd_test] Running Cockpit MFD framework test suite..." << std::endl;
 
@@ -3745,6 +3843,9 @@ int main() {
 
     if (test_joystick_button_and_axis_binds_parsing() != 0) return 1;
     std::cout << "  ok  Joystick Button and Axis Binds Parsing (#20)" << std::endl;
+
+    if (test_drop_focus_and_submenu_selection() != 0) return 1;
+    std::cout << "  ok  Defocus on Select (#21) & Submenu Selection Default (#22)" << std::endl;
 
     std::cout << "[mfd_test] ALL TESTS PASSED." << std::endl;
     ExitProcess(0);

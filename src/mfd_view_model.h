@@ -81,6 +81,7 @@ struct MfdListItem {
     std::vector<MfdCheckItem> checks;
     MfdItemAction action = MfdItemAction::kEvent;
     MfdItemAction backAction = MfdItemAction::kEvent;  // Run on Back press
+    bool dropFocus = false;  // Drop gaze/input focus immediately after action (#21)
 
     MfdListItem() = default;
     MfdListItem(std::string id_, std::string label_, std::string value_ = "", std::string sublabel_ = "", std::string badge_ = "")
@@ -100,6 +101,7 @@ struct MfdKeyValue {
     MfdNamedColor valueNamedColor = MfdNamedColor::kNormal;
     MfdItemAction action = MfdItemAction::kEvent;
     MfdItemAction backAction = MfdItemAction::kEvent;  // Run on Back press
+    bool dropFocus = false;  // Drop gaze/input focus immediately after action (#21)
 
     MfdKeyValue() = default;
     MfdKeyValue(std::string k, std::string v, MfdColor vc = palette::kAmberNormal)
@@ -126,6 +128,7 @@ struct MfdTab {
     std::vector<MfdListItem> items;
     int selectedIndex = 0;
     int scrollOffset = 0;
+    int defaultSelectedItem = -1;  // Explicit selection index override from schema/companion (#22)
 
     // For kKeyValue tabs:
     std::vector<MfdKeyValue> keyValues;

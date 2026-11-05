@@ -41,6 +41,11 @@ public:
     MfdFocusState update(const Vec3& headPos, const Vec3& headForward,
                          const MfdPose& mfdPose, float dtSeconds);
 
+    void dropFocus() {
+        m_state = MfdFocusState::kUnfocused;
+        m_timer = 0.0f;
+    }
+
     MfdFocusState currentState() const { return m_state; }
     bool isFocused() const { return m_state == MfdFocusState::kFocused; }
     float gazeAngleDegrees() const { return m_lastGazeAngleDeg; }

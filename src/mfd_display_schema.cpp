@@ -349,6 +349,11 @@ bool parseDisplayJson(const char* data,
             if (tabVal.contains("title") && tabVal["title"].is_string()) {
                 tab.title = truncateString(tabVal["title"].get<std::string>());
             }
+            if (tabVal.contains("defaultSelectedItem") && tabVal["defaultSelectedItem"].is_number_integer()) {
+                tab.defaultSelectedItem = tabVal["defaultSelectedItem"].get<int>();
+            } else if (tabVal.contains("selectedIndex") && tabVal["selectedIndex"].is_number_integer()) {
+                tab.defaultSelectedItem = tabVal["selectedIndex"].get<int>();
+            }
 
             // Tab type
             if (!tabVal.contains("type") || !tabVal["type"].is_string()) {
@@ -456,6 +461,9 @@ bool parseDisplayJson(const char* data,
                             }
                             item.backAction = parseItemAction(ba);
                         }
+                        if (itemVal.contains("dropFocus") && itemVal["dropFocus"].is_boolean()) {
+                            item.dropFocus = itemVal["dropFocus"].get<bool>();
+                        }
                         if (itemVal.contains("checks") && itemVal["checks"].is_array()) {
                             const auto& checksArr = itemVal["checks"];
                             size_t checkCount = checksArr.size();
@@ -545,6 +553,9 @@ bool parseDisplayJson(const char* data,
                                 return false;
                             }
                             kv.backAction = parseItemAction(ba);
+                        }
+                        if (itemVal.contains("dropFocus") && itemVal["dropFocus"].is_boolean()) {
+                            kv.dropFocus = itemVal["dropFocus"].get<bool>();
                         }
                         tab.keyValues.push_back(std::move(kv));
                     }

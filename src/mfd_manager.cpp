@@ -365,7 +365,7 @@ void MfdManager::setupScreenCallbacks(MfdScreen& screen) {
         if (scr) scr->isDirty = true;
     });
 
-    decl->setSelectCallback([this, pkgId, scrId, qId](const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value) {
+    decl->setSelectCallback([this, pkgId, scrId, qId](const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value, bool dropFocus) {
         auto* scr = findScreen(qId);
         if (tabId == "__settings") {
             if (scr) handleSettingsAdjustment(*scr, itemId.empty() ? itemLabel : itemId, 1);
@@ -379,7 +379,21 @@ void MfdManager::setupScreenCallbacks(MfdScreen& screen) {
                 );
             }
         }
-        if (scr) scr->isDirty = true;
+        if (scr) {
+            if (dropFocus) {
+                scr->gazeTracker.dropFocus();
+                if (scr->lastFocused) {
+                    scr->lastFocused = false;
+                    if (scr->provider) {
+                        scr->provider->onFocusChanged(false);
+                    }
+                    if (!pkgId.empty()) {
+                        EventWriter::instance().enqueue(MfdEventRecord::createFocusLost(pkgId, scrId));
+                    }
+                }
+            }
+            scr->isDirty = true;
+        }
     });
 
     decl->setBackCallback([this, pkgId, scrId, qId](const std::string& tabId, int itemIndex, const std::string& itemId, const std::string& itemLabel, const std::string& action, const std::string& value) {
