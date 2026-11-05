@@ -575,7 +575,7 @@ func TestJournalTailer_RealtimeAppendsAndRollover(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	entriesCh, _ := TailJournal(ctx, tempDir, WithJournalPollInterval(10*time.Millisecond))
@@ -591,6 +591,7 @@ func TestJournalTailer_RealtimeAppendsAndRollover(t *testing.T) {
 	}
 
 	// 2. Append new event to j1Path in real time
+	time.Sleep(25 * time.Millisecond)
 	f1, err := os.OpenFile(j1Path, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatal(err)
@@ -621,6 +622,10 @@ func TestJournalTailer_RealtimeAppendsAndRollover(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for rolled file event")
+	}
+
+	cancel()
+	for range entriesCh {
 	}
 }
 

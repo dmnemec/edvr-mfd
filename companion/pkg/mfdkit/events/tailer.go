@@ -150,7 +150,7 @@ func runTailer(ctx context.Context, path string, cfg tailerConfig, eventsCh chan
 				}
 			}
 
-			f, err := os.Open(path)
+			f, err := openSharedRead(path)
 			if err != nil {
 				file = nil
 				sendErr(fmt.Errorf("events: open %s: %w", path, err))
@@ -344,7 +344,7 @@ func replayMatchingRolledFile(ctx context.Context, path string, lastSeq *uint64,
 		return
 	}
 
-	f, err := os.Open(rolled)
+	f, err := openSharedRead(rolled)
 	if err != nil {
 		sendErr(fmt.Errorf("events: open rolled %s: %w", rolled, err))
 		return
@@ -388,7 +388,7 @@ func replayMatchingRolledFile(ctx context.Context, path string, lastSeq *uint64,
 
 // readFirstEvent reads the first non-empty JSON event from a file.
 func readFirstEvent(filePath string) (*Event, error) {
-	f, err := os.Open(filePath)
+	f, err := openSharedRead(filePath)
 	if err != nil {
 		return nil, err
 	}

@@ -270,7 +270,7 @@ func runJournalTailer(
 		sendErr(fmt.Errorf("failed opening journal file %s: %w", currentPath, err))
 		return
 	}
-	defer currentFile.Close()
+	defer func() { if currentFile != nil { currentFile.Close() } }()
 
 	// Advance offset to the end of what was replayed/read
 	if fi, err := currentFile.Stat(); err == nil {
@@ -285,7 +285,9 @@ func runJournalTailer(
 	buf := make([]byte, cfg.bufferSize)
 
 	readAvailableLines := func() bool {
-		fi, statErr := currentFile.Stat()
+		// On Windows, Stat() on an open file handle may return cached file size if written by another handle.
+		// os.Stat(currentPath) gets the actual metadata from directory.
+		fi, statErr := os.Stat(currentPath)
 		if statErr != nil {
 			sendErr(statErr)
 			return true
