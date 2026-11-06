@@ -408,12 +408,10 @@ func (s *ShipState) BuildShipDisplay() *display.Display {
 		return mI.Slot < mJ.Slot
 	})
 
-	defSelZero := 0
 	integrityTab := display.Tab{
-		ID:                  "integrity",
-		Title:               "INTEGRITY",
-		Type:                display.TabTypeList,
-		DefaultSelectedItem: &defSelZero,
+		ID:    "integrity",
+		Title: "INTEGRITY",
+		Type:  display.TabTypeList,
 	}
 
 	if len(modules) == 0 {
@@ -423,7 +421,6 @@ func (s *ShipState) BuildShipDisplay() *display.Display {
 				Label:      "No module telemetry",
 				Value:      "—",
 				ValueColor: display.PaletteDim,
-				DropFocus:  true,
 			},
 		}
 	} else {
@@ -449,7 +446,6 @@ func (s *ShipState) BuildShipDisplay() *display.Display {
 				ValueColor: valColor,
 				Icon:       icon,
 				Action:     display.ActionEvent,
-				DropFocus:  true,
 			}
 			integrityTab.Items = append(integrityTab.Items, item)
 		}
@@ -563,10 +559,9 @@ func (s *ShipState) BuildShipDisplay() *display.Display {
 	}
 
 	cargoTab := display.Tab{
-		ID:                  "cargo",
-		Title:               "CARGO",
-		Type:                display.TabTypeList,
-		DefaultSelectedItem: &defSelZero,
+		ID:    "cargo",
+		Title: "CARGO",
+		Type:  display.TabTypeList,
 	}
 
 	if len(rows) == 0 {
@@ -576,7 +571,6 @@ func (s *ShipState) BuildShipDisplay() *display.Display {
 				Label:      "No cargo detected",
 				Value:      "—",
 				ValueColor: display.PaletteDim,
-				DropFocus:  true,
 			},
 		}
 	} else {
@@ -616,7 +610,6 @@ func (s *ShipState) BuildShipDisplay() *display.Display {
 				ValueColor: valColor,
 				Icon:       icon,
 				Action:     display.ActionEvent,
-				DropFocus:  true,
 			}
 			cargoTab.Items = append(cargoTab.Items, item)
 		}
